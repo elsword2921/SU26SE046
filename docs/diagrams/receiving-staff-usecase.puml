@@ -1,0 +1,58 @@
+@startuml
+left to right direction
+skinparam packageStyle rectangle
+skinparam usecase {
+  BackgroundColor White
+  BorderColor Black
+}
+
+actor "Receiving Staff" as RS
+
+rectangle "Used Clothing Lifecycle Management System" {
+
+  usecase "View Assigned\nRequests" as UC1
+  usecase "View Request\nDetail" as UC2
+  usecase "Receive Donation/\nSelling Request" as UC3
+  usecase "Accept Request" as UC4
+  usecase "Reject Request" as UC5
+  usecase "Schedule Pickup" as UC6
+  usecase "Confirm Clothing\nPickup" as UC7
+  usecase "Verify Clothing\nInformation" as UC8
+  usecase "Measure Actual\nWeight" as UC9
+  usecase "Process Donor\nPayment" as UC10
+  usecase "Create Intake\nBatch" as UC11
+  usecase "Upload Batch\nImages" as UC12
+  usecase "Record Receiving\nNotes" as UC13
+  usecase "Generate Receiving\nRecord" as UC14
+  usecase "Transfer Batch to\nClassification" as UC15
+  usecase "Track Intake Batch\nStatus" as UC16
+  usecase "View Receiving\nHistory" as UC17
+}
+
+RS --> UC1
+RS --> UC2
+RS --> UC3
+RS --> UC6
+RS --> UC7
+RS --> UC8
+RS --> UC9
+RS --> UC10
+RS --> UC11
+RS --> UC14
+RS --> UC15
+RS --> UC16
+RS --> UC17
+
+UC3 .> UC4 : <<include>>
+UC3 .> UC5 : <<extend>>
+
+UC8 .> UC9 : <<include>>
+
+UC11 .> UC12 : <<include>>
+UC11 .> UC13 : <<include>>
+
+UC7 .> UC8 : <<include>>
+
+UC10 .> UC14 : <<include>>
+
+@enduml

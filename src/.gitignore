@@ -1,0 +1,87 @@
+# Build results
+[Bb]in/
+[Oo]bj/
+
+# Visual Studio files
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Visual Studio Code
+.vscode/
+
+# Rider / JetBrains
+.idea/
+*.sln.iml
+
+# Logs
+*.log
+
+# Test results
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+
+# ASP.NET Core
+appsettings.Development.json
+
+# User-specific files
+*.rsuser
+
+# NuGet packages
+*.nupkg
+packages/
+.nuget/
+
+# NuGet v3 cache
+project.lock.json
+project.assets.json
+
+# Entity Framework migrations (optional)
+# Uncomment if you don't want to commit migrations
+# Migrations/
+
+# Database files
+*.mdf
+*.ldf
+*.db
+*.sqlite
+
+# Docker
+docker-compose.override.yml
+
+# Environment variables / secrets
+.env
+.env.*
+secrets.json
+
+# Publish output
+publish/
+[Pp]ublish/
+
+# Azure publish settings
+*.pubxml
+*.publishproj
+
+# Temporary files
+*.tmp
+*.temp
+*.cache
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Swagger generated files
+swagger.json
+
+# Node (if ASP.NET has React/Vite frontend)
+node_modules/
+dist/
+build/
+
+# Coverage
+coverage/
+*.coverage
+*.coveragexml
