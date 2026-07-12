@@ -25,7 +25,7 @@ namespace DAL.Models
 
         public string? RejectReason { get; set; }
 
-        public string Status { get; set; } = string.Empty;
+        public DonationRequestStatus Status { get; set; }
 
         // Navigation
 

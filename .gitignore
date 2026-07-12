@@ -1,0 +1,11 @@
+# Build outputs
+artifacts/
+[Bb]in/
+[Oo]bj/
+
+# OS / editor
+.vs/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

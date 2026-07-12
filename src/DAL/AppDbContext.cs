@@ -1,4 +1,4 @@
-﻿using DAL.Models;
+using DAL.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace DAL
@@ -83,6 +83,10 @@ namespace DAL
                     CreateAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc)
                 }
             );
+            modelBuilder.Entity<DonationRequest>()
+                .Property(x => x.Status)
+                .HasConversion<string>();
+
             modelBuilder.Entity<DonationRequest>()
                 .HasOne(x => x.Donor)
                 .WithMany(x => x.DonationRequests)

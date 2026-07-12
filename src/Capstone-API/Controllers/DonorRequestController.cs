@@ -1,4 +1,4 @@
-﻿using BLL.DTOs;
+using BLL.DTOs;
 using BLL.Services.Interfaces.DonorRequestService;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -31,6 +31,24 @@ namespace Capstone_API.Controllers
                 Message =
                 "Donation request created successfully."
             });
+        }
+
+        [HttpGet("search")]
+        [AllowAnonymous]
+        public async Task<IActionResult> SearchByPhoneNumber([FromQuery] string phoneNumber)
+        {
+            if (string.IsNullOrWhiteSpace(phoneNumber))
+            {
+                return BadRequest(new
+                {
+                    Message = "Phone number is required."
+                });
+            }
+
+            var result =
+                await _service.SearchByPhoneNumberAsync(phoneNumber);
+
+            return Ok(result);
         }
     }
 }

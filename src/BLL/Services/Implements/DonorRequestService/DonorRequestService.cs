@@ -1,8 +1,9 @@
-﻿using BLL.DTOs;
+using BLL.DTOs;
 using BLL.Services.Interfaces.DonorRequestService;
 using DAL.Models;
 using DAL.Models.Enum;
 using DAL.Repository;
+using Microsoft.EntityFrameworkCore;
 
 namespace BLL.Services.Implements.DonorRequestService
 {
@@ -40,7 +41,8 @@ namespace BLL.Services.Implements.DonorRequestService
                     ImageUrls = dto.ImageUrls,
                     EstimateWeight = dto.EstimateWeight,
                     PickupAddress = dto.PickupAddress,
-                    CreateAt = DateTime.UtcNow
+                    CreateAt = DateTime.UtcNow,
+                    Status = DonationRequestStatus.WaitingReceivingStaff
                 };
 
             await _unitOfWork
@@ -48,6 +50,65 @@ namespace BLL.Services.Implements.DonorRequestService
                 .AddAsync(request);
 
             await _unitOfWork.SaveChangeAsync();
+        }
+        public async Task<List<DonorRequestSearchResultDto>> SearchByPhoneNumberAsync(string phoneNumber)
+        {
+            var normalizedPhoneNumber =
+                new string(phoneNumber.Where(char.IsDigit).ToArray());
+
+            if (string.IsNullOrWhiteSpace(normalizedPhoneNumber))
+            {
+                return new List<DonorRequestSearchResultDto>();
+            }
+
+            var requests =
+                await _unitOfWork
+                .DonorRequestRepository
+                .GetAllAsync(
+                    x => x.Donor.PhoneNumber == normalizedPhoneNumber
+                         && x.IsActive != false,
+                    noTracked: true);
+
+            return await requests
+                .Include(x => x.Donor)
+                .Include(x => x.Warehouse)
+                .OrderByDescending(x => x.CreateAt)
+                .Select(x => new DonorRequestSearchResultDto
+                {
+                    Id = x.Id,
+                    Code = "DR-" + x.CreateAt.GetValueOrDefault().Year + "-" + x.Id.ToString().Substring(0, 8).ToUpper(),
+                    DonorName = x.Donor.FullName,
+                    PhoneNumber = x.Donor.PhoneNumber,
+                    Description = x.Description,
+                    ImageUrls = x.ImageUrls,
+                    EstimateWeight = x.EstimateWeight,
+                    ActualWeight = x.ActualWeight,
+                    PickupAddress = x.PickupAddress,
+                    PickupDate = x.PickupDate,
+                    WarehouseId = x.WarehouseId,
+                    WarehouseAddress = x.Warehouse.Address,
+                    Status = x.Status.ToString(),
+                    StatusText = GetStatusText(x.Status),
+                    CreatedAt = x.CreateAt,
+                })
+                .ToListAsync();
+        }
+
+        private static string GetStatusText(DonationRequestStatus status)
+        {
+            return status switch
+            {
+                DonationRequestStatus.PendingStaffAssign => "Đang chờ phân công nhân viên",
+                DonationRequestStatus.ReceivingStaffAssigned => "Đã phân công nhân viên tiếp nhận",
+                DonationRequestStatus.WaitingReceivingStaff => "Đang chờ nhân viên tiếp nhận đến lấy",
+                DonationRequestStatus.Confirmed => "Đã xác nhận đơn quyên góp",
+                DonationRequestStatus.Reject => "Đơn quyên góp bị từ chối",
+                DonationRequestStatus.SendToClassification => "Đã chuyển sang phân loại",
+                DonationRequestStatus.Classifying => "Đang phân loại",
+                DonationRequestStatus.Classified => "Đã phân loại",
+                DonationRequestStatus.Stored => "Đã lưu kho",
+                _ => "Đang xử lý",
+            };
         }
     }
 }
