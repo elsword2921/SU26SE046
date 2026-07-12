@@ -33,6 +33,18 @@ namespace Capstone_API.Controllers
             });
         }
 
+
+        [HttpGet("my")]
+        [Authorize(Roles = "Donor")]
+        public async Task<IActionResult> GetMyRequests()
+        {
+            Guid donorId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+
+            var result =
+                await _service.GetByDonorIdAsync(donorId);
+
+            return Ok(result);
+        }
         [HttpGet("search")]
         [AllowAnonymous]
         public async Task<IActionResult> SearchByPhoneNumber([FromQuery] string phoneNumber)

@@ -69,7 +69,28 @@ namespace BLL.Services.Implements.DonorRequestService
                          && x.IsActive != false,
                     noTracked: true);
 
-            return await requests
+            return await MapToSearchResult(requests)
+                .ToListAsync();
+
+        }
+
+        public async Task<List<DonorRequestSearchResultDto>> GetByDonorIdAsync(Guid donorId)
+        {
+            var requests =
+                await _unitOfWork
+                .DonorRequestRepository
+                .GetAllAsync(
+                    x => x.DonorId == donorId
+                         && x.IsActive != false,
+                    noTracked: true);
+
+            return await MapToSearchResult(requests)
+                .ToListAsync();
+        }
+
+        private static IQueryable<DonorRequestSearchResultDto> MapToSearchResult(IQueryable<DonationRequest> requests)
+        {
+            return requests
                 .Include(x => x.Donor)
                 .Include(x => x.Warehouse)
                 .OrderByDescending(x => x.CreateAt)
@@ -90,10 +111,8 @@ namespace BLL.Services.Implements.DonorRequestService
                     Status = x.Status.ToString(),
                     StatusText = GetStatusText(x.Status),
                     CreatedAt = x.CreateAt,
-                })
-                .ToListAsync();
+                });
         }
-
         private static string GetStatusText(DonationRequestStatus status)
         {
             return status switch
