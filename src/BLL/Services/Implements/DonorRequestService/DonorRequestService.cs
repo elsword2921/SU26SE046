@@ -1,4 +1,4 @@
-using BLL.DTOs;
+﻿using BLL.DTOs;
 using BLL.Services.Interfaces.DonorRequestService;
 using DAL.Models;
 using DAL.Models.Enum;
@@ -48,6 +48,81 @@ namespace BLL.Services.Implements.DonorRequestService
             await _unitOfWork
                 .DonorRequestRepository
                 .AddAsync(request);
+
+            await _unitOfWork.SaveChangeAsync();
+        }
+        public async Task UpdateAsync(Guid donorId, Guid requestId, UpdateDonorRequestDto dto)
+        {
+            var request =
+                await _unitOfWork
+                .DonorRequestRepository
+                .GetWithConditionAsync(
+                    x => x.Id == requestId
+                         && x.DonorId == donorId
+                         && x.IsActive != false);
+
+            if (request == null)
+            {
+                throw new Exception("Donation request not found");
+            }
+
+            if (!CanDonorModify(request.Status))
+            {
+                throw new Exception("Donation request cannot be updated at this status");
+            }
+
+            var warehouse =
+                await _unitOfWork
+                .WarehouseRepository
+                .GetByIdAsync(dto.WarehouseId);
+
+            if (warehouse == null)
+            {
+                throw new Exception("Warehouse not found");
+            }
+
+            request.WarehouseId = dto.WarehouseId;
+            request.PickupDate = DateTime.SpecifyKind(dto.PickupDate, DateTimeKind.Utc);
+            request.Description = dto.Description;
+            request.ImageUrls = dto.ImageUrls;
+            request.EstimateWeight = dto.EstimateWeight;
+            request.PickupAddress = dto.PickupAddress;
+            request.UpdateAt = DateTime.UtcNow;
+
+            await _unitOfWork
+                .DonorRequestRepository
+                .UpdateAsync(request);
+
+            await _unitOfWork.SaveChangeAsync();
+        }
+
+        public async Task CancelAsync(Guid donorId, Guid requestId)
+        {
+            var request =
+                await _unitOfWork
+                .DonorRequestRepository
+                .GetWithConditionAsync(
+                    x => x.Id == requestId
+                         && x.DonorId == donorId
+                         && x.IsActive != false);
+
+            if (request == null)
+            {
+                throw new Exception("Donation request not found");
+            }
+
+            if (!CanDonorModify(request.Status))
+            {
+                throw new Exception("Donation request cannot be cancelled at this status");
+            }
+
+            request.Status = DonationRequestStatus.Cancelled;
+            request.RejectReason = "Cancelled by donor";
+            request.UpdateAt = DateTime.UtcNow;
+
+            await _unitOfWork
+                .DonorRequestRepository
+                .UpdateAsync(request);
 
             await _unitOfWork.SaveChangeAsync();
         }
@@ -113,6 +188,12 @@ namespace BLL.Services.Implements.DonorRequestService
                     CreatedAt = x.CreateAt,
                 });
         }
+        private static bool CanDonorModify(DonationRequestStatus status)
+        {
+            return status == DonationRequestStatus.PendingStaffAssign
+                   || status == DonationRequestStatus.WaitingReceivingStaff;
+        }
+
         private static string GetStatusText(DonationRequestStatus status)
         {
             return status switch
@@ -126,8 +207,9 @@ namespace BLL.Services.Implements.DonorRequestService
                 DonationRequestStatus.Classifying => "Đang phân loại",
                 DonationRequestStatus.Classified => "Đã phân loại",
                 DonationRequestStatus.Stored => "Đã lưu kho",
+                DonationRequestStatus.Cancelled => "Đơn quyên góp bị hủy",
                 _ => "Đang xử lý",
             };
-        }
+        }  
     }
 }

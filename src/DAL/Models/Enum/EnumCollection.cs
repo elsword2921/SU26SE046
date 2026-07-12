@@ -1,4 +1,4 @@
-﻿namespace DAL.Models.Enum
+namespace DAL.Models.Enum
 {
     public enum DonationRequestStatus
     {
@@ -7,6 +7,7 @@
         WaitingReceivingStaff,
         Confirmed,
         Reject,
+        Cancelled,
         SendToClassification,
         Classifying,
         Classified,

@@ -34,6 +34,34 @@ namespace Capstone_API.Controllers
         }
 
 
+
+        [HttpPut("{id}")]
+        [Authorize(Roles = "Donor")]
+        public async Task<IActionResult> Update(Guid id, UpdateDonorRequestDto dto)
+        {
+            Guid donorId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+
+            await _service.UpdateAsync(donorId, id, dto);
+
+            return Ok(new
+            {
+                Message = "Donation request updated successfully."
+            });
+        }
+
+        [HttpPatch("{id}/cancel")]
+        [Authorize(Roles = "Donor")]
+        public async Task<IActionResult> Cancel(Guid id)
+        {
+            Guid donorId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+
+            await _service.CancelAsync(donorId, id);
+
+            return Ok(new
+            {
+                Message = "Donation request cancelled successfully."
+            });
+        }
         [HttpGet("my")]
         [Authorize(Roles = "Donor")]
         public async Task<IActionResult> GetMyRequests()
