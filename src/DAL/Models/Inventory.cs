@@ -5,14 +5,15 @@ namespace DAL.Models
 {
     public class Inventory : BaseEntity
     {
-        public List<Guid> ClassificationItemId { get; set; }
-        public List<Guid> IntakeBatchId { get; set; }
-        public Guid CategoryId { get; set; }
-        public Category Category { get; set; }
-        public ClothCondition ClothCondition { get; set; }  
-        public ClothGender ClothGender { get; set; }
-        public ClothSize ClothSize { get; set; }
-        public ClothTargetAge ClothTargetUser { get; set; }
-        public int TotalCloth { get; set; }
+        public Guid WarehouseId { get; set; }
+        public Guid? AreaGroupId { get; set; }
+        public Guid ProfileId { get; set; }
+        public int ConditionRating { get; set; }
+        public int Quantity { get; set; }
+        public decimal TotalWeight { get; set; }
+        public virtual Warehouse Warehouse { get; set; } = null!;
+        public virtual AreaGroup? AreaGroup { get; set; }
+        public virtual Profile Profile { get; set; } = null!;
+        public virtual ICollection<TransactionItem> TransactionItems { get; set; } = new List<TransactionItem>();
     }
 }

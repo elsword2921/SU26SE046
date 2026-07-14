@@ -9,6 +9,8 @@ namespace DAL.Models
         public string? PhoneNumber { get; set; }
         public string? Email { get; set; }
         public string? Description { get; set; }
+        public decimal TotalCapacityKg { get; set; }
+        public decimal CurrentWeight { get; set; }
 
         // Navigation
         public virtual ICollection<User> Users { get; set; }
@@ -17,5 +19,8 @@ namespace DAL.Models
             = new List<DonationRequest>();
         public virtual ICollection<IntakeBatch> IntakeBatches { get; set; }
             = new List<IntakeBatch>();
+        public virtual ICollection<Shift> Shifts { get; set; } = new List<Shift>();
+        public virtual ICollection<WarehouseArea> Areas { get; set; } = new List<WarehouseArea>();
+        public virtual ICollection<Inventory> Inventories { get; set; } = new List<Inventory>();
     }
 }

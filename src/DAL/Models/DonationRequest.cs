@@ -9,8 +9,6 @@ namespace DAL.Models
 
         public Guid WarehouseId { get; set; }
 
-        public Guid? BatchId { get; set; }
-
         public List<string>? ImageUrls { get; set; }
 
         public string? Description { get; set; }
@@ -33,6 +31,10 @@ namespace DAL.Models
 
         public virtual Warehouse Warehouse { get; set; } = null!;
 
-        public virtual IntakeBatch? Batch { get; set; }
+        public virtual ICollection<IntakeBatchDonationRequest> IntakeBatchDonationRequests { get; set; }
+            = new List<IntakeBatchDonationRequest>();
+
+        public virtual ICollection<PickupAssignment> PickupAssignments { get; set; }
+            = new List<PickupAssignment>();
     }
 }

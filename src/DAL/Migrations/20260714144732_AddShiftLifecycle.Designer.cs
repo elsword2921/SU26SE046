@@ -4,6 +4,7 @@ using DAL;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DAL.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260714144732_AddShiftLifecycle")]
+    partial class AddShiftLifecycle
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -683,6 +686,9 @@ namespace DAL.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<Guid?>("BatchId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<DateTime?>("CreateAt")
                         .HasColumnType("datetime2");
 
@@ -735,6 +741,8 @@ namespace DAL.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("BatchId");
 
                     b.HasIndex("DonorId");
 
@@ -834,9 +842,6 @@ namespace DAL.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<Guid>("ShiftId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.Property<DateTime?>("StartedAt")
                         .HasColumnType("datetime2");
 
@@ -861,59 +866,9 @@ namespace DAL.Migrations
 
                     b.HasIndex("ReceivingTeamId");
 
-                    b.HasIndex("ShiftId")
-                        .IsUnique();
-
                     b.HasIndex("WarehouseId");
 
                     b.ToTable("IntakeBatches");
-                });
-
-            modelBuilder.Entity("DAL.Models.IntakeBatchDonationRequest", b =>
-                {
-                    b.Property<Guid>("IntakeBatchId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("DonationRequestId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime>("AddedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid>("AddedByStaffId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime?>("CreateAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid?>("CreatedBy")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime?>("DeleteAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid?>("DeletedBy")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<bool?>("IsActive")
-                        .HasColumnType("bit");
-
-                    b.Property<DateTime?>("UpdateAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid?>("UpdatedBy")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.HasKey("IntakeBatchId", "DonationRequestId");
-
-                    b.HasIndex("AddedByStaffId");
-
-                    b.HasIndex("DonationRequestId");
-
-                    b.ToTable("IntakeBatchDonationRequests");
                 });
 
             modelBuilder.Entity("DAL.Models.Inventory", b =>
@@ -2045,6 +2000,11 @@ namespace DAL.Migrations
 
             modelBuilder.Entity("DAL.Models.DonationRequest", b =>
                 {
+                    b.HasOne("DAL.Models.IntakeBatch", "Batch")
+                        .WithMany("DonationRequests")
+                        .HasForeignKey("BatchId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("DAL.Models.User", "Donor")
                         .WithMany("DonationRequests")
                         .HasForeignKey("DonorId")
@@ -2056,6 +2016,8 @@ namespace DAL.Migrations
                         .HasForeignKey("WarehouseId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("Batch");
 
                     b.Navigation("Donor");
 
@@ -2096,12 +2058,6 @@ namespace DAL.Migrations
                         .HasForeignKey("ReceivingTeamId")
                         .OnDelete(DeleteBehavior.Restrict);
 
-                    b.HasOne("DAL.Models.Shift", "Shift")
-                        .WithOne("IntakeBatch")
-                        .HasForeignKey("DAL.Models.IntakeBatch", "ShiftId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
                     b.HasOne("DAL.Models.Warehouse", "Warehouse")
                         .WithMany("IntakeBatches")
                         .HasForeignKey("WarehouseId")
@@ -2110,36 +2066,7 @@ namespace DAL.Migrations
 
                     b.Navigation("ReceivingTeam");
 
-                    b.Navigation("Shift");
-
                     b.Navigation("Warehouse");
-                });
-
-            modelBuilder.Entity("DAL.Models.IntakeBatchDonationRequest", b =>
-                {
-                    b.HasOne("DAL.Models.User", "AddedByStaff")
-                        .WithMany()
-                        .HasForeignKey("AddedByStaffId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("DAL.Models.DonationRequest", "DonationRequest")
-                        .WithMany("IntakeBatchDonationRequests")
-                        .HasForeignKey("DonationRequestId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("DAL.Models.IntakeBatch", "IntakeBatch")
-                        .WithMany("IntakeBatchDonationRequests")
-                        .HasForeignKey("IntakeBatchId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("AddedByStaff");
-
-                    b.Navigation("DonationRequest");
-
-                    b.Navigation("IntakeBatch");
                 });
 
             modelBuilder.Entity("DAL.Models.Inventory", b =>
@@ -2447,8 +2374,6 @@ namespace DAL.Migrations
 
             modelBuilder.Entity("DAL.Models.DonationRequest", b =>
                 {
-                    b.Navigation("IntakeBatchDonationRequests");
-
                     b.Navigation("PickupAssignments");
                 });
 
@@ -2456,7 +2381,7 @@ namespace DAL.Migrations
                 {
                     b.Navigation("ClassifiedItems");
 
-                    b.Navigation("IntakeBatchDonationRequests");
+                    b.Navigation("DonationRequests");
 
                     b.Navigation("PickupAssignments");
                 });
@@ -2496,8 +2421,6 @@ namespace DAL.Migrations
 
             modelBuilder.Entity("DAL.Models.Shift", b =>
                 {
-                    b.Navigation("IntakeBatch");
-
                     b.Navigation("PickupAssignments");
 
                     b.Navigation("Teams");
