@@ -1,5 +1,6 @@
 ﻿using BLL.DTOs;
 using BLL.Services.Interfaces.DonorRequestService;
+using DAL;
 using DAL.Models;
 using DAL.Models.Enum;
 using DAL.Repository;
@@ -10,10 +11,12 @@ namespace BLL.Services.Implements.DonorRequestService
     public class DonorRequestService : IDonorRequestService
     {
         private readonly IUnitOfWork _unitOfWork;
+        private readonly AppDbContext _context;
 
-        public DonorRequestService(IUnitOfWork unitOfWork)
+        public DonorRequestService(IUnitOfWork unitOfWork, AppDbContext context)
         {
             _unitOfWork = unitOfWork;
+            _context = context;
         }
         public async Task CreateAsync(
             Guid donorId,
@@ -49,7 +52,63 @@ namespace BLL.Services.Implements.DonorRequestService
                 .DonorRequestRepository
                 .AddAsync(request);
 
+            await AssignToAvailableReceivingBatchAsync(request);
             await _unitOfWork.SaveChangeAsync();
+        }
+
+        private async Task AssignToAvailableReceivingBatchAsync(DonationRequest request)
+        {
+            var pickupDate = request.PickupDate!.Value.Date;
+            var today = DateTime.UtcNow.Date;
+            if (pickupDate > today) return;
+
+            var batch = await _context.IntakeBatches
+                .Include(x => x.Shift)
+                .Where(x => x.WarehouseId == request.WarehouseId
+                    && x.IsActive != false
+                    && x.ReceivingTeamId.HasValue
+                    && (x.Status == "Planned" || x.Status == "Receiving"
+                        || (x.Status == "Completed" && x.Shift.ShiftDate.Date == today))
+                    && (x.Shift.Status == "Scheduled" || x.Shift.Status == "InProgress"
+                        || (x.Shift.Status == "Completed" && x.Shift.ShiftDate.Date == today))
+                    && x.Shift.ShiftDate.Date >= pickupDate
+                    && x.Shift.ShiftDate.Date <= today)
+                .OrderByDescending(x => x.Shift.ShiftDate)
+                .ThenByDescending(x => x.Shift.StartTime)
+                .FirstOrDefaultAsync();
+
+            if (batch is null) return;
+
+            if (batch.Status == "Completed")
+            {
+                batch.Status = "Planned";
+                batch.CompletedAt = null;
+                batch.UpdateAt = DateTime.UtcNow;
+                batch.Shift.Status = "Scheduled";
+                batch.Shift.StartedAt = null;
+                batch.Shift.CompletedAt = null;
+                batch.Shift.UpdateAt = DateTime.UtcNow;
+            }
+
+            var lastRouteOrder = await _context.PickupAssignments
+                .Where(x => x.IntakeBatchId == batch.Id && x.IsActive != false)
+                .Select(x => (int?)x.RouteOrder)
+                .MaxAsync() ?? 0;
+
+            _context.PickupAssignments.Add(new PickupAssignment
+            {
+                Id = Guid.NewGuid(),
+                DonorRequestId = request.Id,
+                ShiftId = batch.ShiftId,
+                TeamId = batch.ReceivingTeamId!.Value,
+                IntakeBatchId = batch.Id,
+                RouteOrder = lastRouteOrder + 1,
+                AreaKey = request.PickupAddress,
+                Status = "Pending",
+                CreateAt = DateTime.UtcNow
+            });
+            request.Status = DonationRequestStatus.ReceivingStaffAssigned;
+            request.UpdateAt = DateTime.UtcNow;
         }
         public async Task UpdateAsync(Guid donorId, Guid requestId, UpdateDonorRequestDto dto)
         {

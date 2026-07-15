@@ -75,10 +75,14 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
         var candidates = await context.DonationRequests.Include(x => x.Donor)
             .Where(x => x.WarehouseId == shift.WarehouseId && x.IsActive != false
                 && x.Status == DonationRequestStatus.WaitingReceivingStaff
-                && x.PickupDate.HasValue && x.PickupDate.Value.Date == shift.ShiftDate.Date
-                && x.PickupDate.Value.TimeOfDay >= shift.StartTime && x.PickupDate.Value.TimeOfDay <= shift.EndTime
+                && x.PickupDate.HasValue && x.PickupDate.Value.Date <= shift.ShiftDate.Date
+                && (x.PickupDate.Value.Date < shift.ShiftDate.Date
+                    || (x.PickupDate.Value.TimeOfDay >= shift.StartTime
+                        && x.PickupDate.Value.TimeOfDay <= shift.EndTime))
                 && !alreadyPlanned.Contains(x.Id))
-            .OrderBy(x => x.PickupAddress).ToListAsync();
+            .OrderBy(x => x.PickupDate)
+            .ThenBy(x => x.PickupAddress)
+            .ToListAsync();
 
         if (candidates.Count == 0) return 0;
 

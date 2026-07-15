@@ -6,7 +6,6 @@ using Microsoft.AspNetCore.Mvc;
 namespace Capstone_API.Controllers;
 
 [Route("api/warehouses")]
-[Authorize(Roles = "Manager,WarehouseStaff")]
 public class WarehouseController(ICrudService<Warehouse> service) : CrudControllerBase<Warehouse>(service);
 
 [Route("api/categories")]
