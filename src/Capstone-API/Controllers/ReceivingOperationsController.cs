@@ -30,6 +30,12 @@ public class ReceivingOperationsController(IReceivingOperationsService service) 
     [Authorize(Roles = "Manager")]
     public async Task<IActionResult> DeleteYearShifts([FromQuery] Guid warehouseId, [FromQuery] int year)
         => Ok(await service.DeleteYearShiftsAsync(new DeleteYearShiftsDto(warehouseId, year)));
+    
+    [HttpPost("shifts/generate")]
+    [Authorize(Roles = "Manager")]
+    public async Task<IActionResult> GenerateShifts(
+        GenerateShiftsV2Dto dto)
+        => Ok(await service.GenerateShiftsAsync(dto));
 
     [HttpPut("manager-shifts/{shiftId:guid}")]
     [Authorize(Roles = "Manager")]
