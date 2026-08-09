@@ -11,7 +11,7 @@ namespace BLL.Services.Implements.ManagerAccounts;
 public partial class ManagerAccountService(AppDbContext context) : IManagerAccountService
 {
     private static readonly string[] AllowedRoles =
-        ["Donor", "CharityOrganization", "RecyclingOrganization", "ReceivingStaff", "ClassificationStaff", "WarehouseStaff"];
+        ["Donor", "CharityOrganization", "RecyclingOrganization", "DisposalOrganization", "ReceivingStaff", "ClassificationStaff", "WarehouseStaff"];
     private static readonly string[] WarehouseRoles = ["ReceivingStaff", "ClassificationStaff", "WarehouseStaff"];
 
     public async Task<ManagerAccountPageDto> SearchAsync(Guid? warehouseId, string? role, string? search, int page, int pageSize)

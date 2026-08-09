@@ -59,6 +59,43 @@ public class DistributionOperationsService(AppDbContext context, HttpClient ghnC
         await context.SaveChangesAsync(); return request.Id;
     }
 
+    public async Task<Guid> CreateManagerRequestAsync(Guid managerId, CreateManagerRequestDto dto)
+    {
+        var organization = await context.Users.Include(x => x.Role).FirstOrDefaultAsync(x => x.Id == dto.OrganizationId && x.IsActive != false)
+            ?? throw new KeyNotFoundException("Recycling or disposal organization not found.");
+        var processingDirection = GetProcessingDirection(organization.Role.RoleName);
+        ValidateRequest(new CreateDistributionRequestDto(dto.WarehouseId, organization.FullName, organization.PhoneNumber, organization.Address, dto.Notes, dto.Items));
+        if (dto.Items.Count == 0) throw new InvalidOperationException("Select at least one batch.");
+        var ids = dto.Items.Select(x => x.InventoryId).Distinct().ToList();
+        if (ids.Count != dto.Items.Count)throw new InvalidOperationException("A batch can only appear once.");
+        var inventories = await context.Inventories.Where(x =>ids.Contains(x.Id) && x.IsActive != false
+            && x.WarehouseId == dto.WarehouseId && x.ProcessingDirection == processingDirection && x.Status == "Available").ToListAsync();
+        if (inventories.Count != ids.Count)throw new InvalidOperationException("One or more batches are unavailable or belong to another warehouse.");
+        var requestId = Guid.NewGuid();
+        var request = new DistributionRequest{ Id = requestId, RequestCode = BuildRequestCode(requestId), UserId = organization.Id, WarehouseId = dto.WarehouseId,
+            RecipientName = organization.FullName.Trim(), RecipientPhone = organization.PhoneNumber.Trim(), ToAddress = organization.Address.Trim(),
+            RequestNotes = dto.Notes, RequestedAt = DateTime.UtcNow, Status = "PendingOrganizationApproval", CreateAt = DateTime.UtcNow, IsActive = true };
+        foreach (var input in dto.Items)
+        {
+            var inventory = inventories.Single(x => x.Id == input.InventoryId); var available = inventory.Quantity - inventory.ReservedQuantity;
+            if (input.Quantity <= 0 || input.Quantity > available) throw new InvalidOperationException($"Invalid quantity for {inventory.Sku}.");
+            var unitWeight = inventory.Quantity==0?0:inventory.TotalWeight/inventory.Quantity;
+            request.Items.Add(new DistributionItem { Id = Guid.NewGuid(), InventoryId = inventory.Id,
+                ConditionRating=inventory.ConditionRating, RequestedQuantity = input.Quantity,
+                RequestedWeight=Math.Round(unitWeight*input.Quantity,2), CreateAt=DateTime.UtcNow, IsActive=true });
+        }
+        context.DistributionRequests.Add(request);
+        var actionText = processingDirection == "Recycling"
+            ? "tái chế"
+            : "tiêu hủy";
+        NotificationWriter.NotifyUser(context,organization.Id,"DistributionRequested",$"Yêu cầu {actionText} mới",
+            $"Manager đã gửi yêu cầu {actionText} gồm " +
+            $"{request.Items.Sum(x => x.RequestedQuantity)} sản phẩm.",
+            $"/organization/distributions/{request.Id}",
+            managerId);
+        await context.SaveChangesAsync(); return request.Id;
+    }
+
     public async Task UpdateAsync(Guid organizationId, Guid id, CreateDistributionRequestDto dto)
     {
         ValidateRequest(dto);
@@ -134,6 +171,33 @@ public class DistributionOperationsService(AppDbContext context, HttpClient ghnC
         foreach(var userId in staff)NotificationWriter.NotifyUser(context,userId,"DistributionApproved","Có yêu cầu xuất kho mới",$"Yêu cầu của {request.RecipientName} đã được duyệt.",$"/warehouse/distributions?requestId={id}",managerId);
         NotificationWriter.NotifyUser(context,request.UserId,"DistributionApproved","Yêu cầu đã được duyệt","Kho đang chuẩn bị hàng theo yêu cầu của bạn.",$"/organization/distributions/{id}",managerId);
         await context.SaveChangesAsync();await tx.CommitAsync();
+    }
+
+    public async Task RespondDistributionRequestAsync(Guid organizationId, Guid id, RespondDistributionRequestDto dto)
+    {
+        var request = await context.DistributionRequests
+            .FirstOrDefaultAsync(x=>x.Id == id && x.UserId == organizationId && x.IsActive != false && x.Status == "PendingOrganizationApproval")
+            ?? throw new InvalidOperationException("Pending request not found or does not belong to this organization.");
+        if (!dto.Accepted)
+        {
+            if (string.IsNullOrWhiteSpace(dto.Notes))
+                throw new InvalidOperationException(
+                    "Decline reason is required.");
+            request.Status = "DeclinedByOrganization";
+            request.RejectReason = dto.Notes.Trim();
+        }
+        else
+        {
+            request.Status = "PendingManagerApproval";
+        }
+        request.UpdateAt = DateTime.UtcNow;
+        var managerIds = await context.Users.Where(x => x.IsActive != false && x.Role.RoleName == "Manager").Select(x => x.Id).ToListAsync();
+        foreach (var managerId in managerIds)
+            NotificationWriter.NotifyUser(context, managerId, dto.Accepted ? "OrganizationAcceptedRequest" : "OrganizationDeclinedRequest",
+                dto.Accepted ? "Tổ chức đã chấp nhận yêu cầu" : "Tổ chức đã từ chối yêu cầu",
+                dto.Accepted ? $"{request.RecipientName} đã chấp nhận yêu cầu {request.RequestCode}." : $"{request.RecipientName} đã từ chối yêu cầu {request.RequestCode}: {request.RejectReason}",
+                $"/manager/distributions?requestId={request.Id}", organizationId);
+        await context.SaveChangesAsync();
     }
 
     public async Task IssueAsync(Guid staffId,Guid id,IssueDistributionDto dto)
@@ -224,5 +288,17 @@ public class DistributionOperationsService(AppDbContext context, HttpClient ghnC
         var phone = System.Text.RegularExpressions.Regex.Replace(dto.RecipientPhone, @"[\s.\-()]", "");
         if (!System.Text.RegularExpressions.Regex.IsMatch(phone, @"^(?:\+84|0)(?:3|5|7|8|9)\d{8}$"))
             throw new InvalidOperationException("Recipient phone is invalid.");
+    }
+
+    private static string GetProcessingDirection(string roleName)
+    {
+        return roleName switch
+        {
+            "RecyclingOrganization" => "Recycling",
+            "DisposalOrganization" => "Disposal",
+
+            _ => throw new InvalidOperationException(
+                "The selected user is not a recycling or disposal organization.")
+        };
     }
 }
