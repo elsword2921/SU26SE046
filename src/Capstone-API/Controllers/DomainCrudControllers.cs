@@ -125,7 +125,7 @@ public class CategoryController(AppDbContext context) : ControllerBase
     }
 }
 
-[Route("api/vouchers")]
+[Route("api/voucher")]
 public class VoucherController(ICrudService<Voucher> service) : CrudControllerBase<Voucher>(service);
 
 [Route("api/pickup-assignments")]

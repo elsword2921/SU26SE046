@@ -26,6 +26,8 @@ namespace DAL
         public DbSet<TransactionItem> TransactionItems => Set<TransactionItem>();
         public DbSet<PickupAssignment> PickupAssignments => Set<PickupAssignment>();
         public DbSet<Voucher> Vouchers => Set<Voucher>();
+        public DbSet<VoucherCode> VoucherCodes => Set<VoucherCode>();
+        public DbSet<VoucherRedemption> VoucherRedemptions => Set<VoucherRedemption>();
         public DbSet<Warehouse> Warehouses => Set<Warehouse>();
         public DbSet<WarehouseArea> WarehouseAreas => Set<WarehouseArea>();
         public DbSet<AreaGroup> AreaGroups => Set<AreaGroup>();
@@ -368,6 +370,80 @@ namespace DAL
                 .WithMany()
                 .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<Voucher>()
+                .Property(x => x.Name)
+                .HasMaxLength(200);
+
+            modelBuilder.Entity<Voucher>()
+                .Property(x => x.PartnerName)
+                .HasMaxLength(100);
+
+            modelBuilder.Entity<Voucher>()
+                .Property(x => x.Status)
+                .HasConversion<string>()
+                .HasMaxLength(30);
+
+            modelBuilder.Entity<Voucher>()
+                .HasIndex(x => new
+                {
+                    x.PartnerName,
+                    x.Name
+                });
+
+            modelBuilder.Entity<VoucherCode>()
+                .Property(x => x.Code)
+                .HasMaxLength(200);
+
+            modelBuilder.Entity<VoucherCode>()
+                .Property(x => x.Status)
+                .HasConversion<string>()
+                .HasMaxLength(30);
+
+            modelBuilder.Entity<VoucherCode>()
+                .HasIndex(x => x.Code)
+                .IsUnique();
+
+            modelBuilder.Entity<VoucherCode>()
+                .HasOne(x => x.Voucher)
+                .WithMany(x => x.VoucherCodes)
+                .HasForeignKey(x => x.VoucherId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<VoucherCode>()
+                .HasOne(x => x.RedeemedByUser)
+                .WithMany(x => x.RedeemedVoucherCodes)
+                .HasForeignKey(x => x.RedeemedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<VoucherRedemption>()
+                .HasOne(x => x.User)
+                .WithMany(x => x.VoucherRedemptions)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<VoucherRedemption>()
+                .HasOne(x => x.Voucher)
+                .WithMany(x => x.VoucherRedemptions)
+                .HasForeignKey(x => x.VoucherId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<VoucherRedemption>()
+                .HasOne(x => x.VoucherCode)
+                .WithOne(x => x.Redemption)
+                .HasForeignKey<VoucherRedemption>(x => x.VoucherCodeId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<VoucherRedemption>()
+                .HasIndex(x => x.VoucherCodeId)
+                .IsUnique();
+
+            modelBuilder.Entity<VoucherRedemption>()
+                .HasIndex(x => new
+                {
+                    x.UserId,
+                    x.RedeemedAt
+                });
 
             foreach (var property in modelBuilder.Model.GetEntityTypes()
                          .SelectMany(entity => entity.GetProperties())

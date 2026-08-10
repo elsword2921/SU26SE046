@@ -47,4 +47,16 @@ namespace DAL.Models.Enum
         Adult,
         Children
     }
+
+    public enum VoucherStatus
+    {
+        Active,
+        Inactive
+    }
+
+    public enum VoucherCodeStatus
+    {
+        Available,
+        Redeemed
+    }
 }
