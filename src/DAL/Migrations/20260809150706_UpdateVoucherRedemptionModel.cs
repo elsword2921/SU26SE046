@@ -80,6 +80,16 @@ namespace DAL.Migrations
                 nullable: false,
                 defaultValue: 0m);
 
+            // Existing databases may contain NULL or non-numeric values because
+            // DonationPoint used to be an optional nvarchar column. Normalize
+            // those rows before enforcing the new non-null integer model.
+            migrationBuilder.Sql("""
+                UPDATE [Users]
+                SET [DonationPoint] = '0'
+                WHERE [DonationPoint] IS NULL
+                   OR TRY_CONVERT(int, [DonationPoint]) IS NULL;
+                """);
+
             migrationBuilder.AlterColumn<int>(
                 name: "DonationPoint",
                 table: "Users",

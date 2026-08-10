@@ -92,6 +92,8 @@ public record ManagerStaffOptionDto(Guid Id, string FullName, string UserName, s
 public record ManagerAssignedRequestDto(Guid Id, string Code, string ContactName, string PhoneNumber,
     string Address, DateTime? PickupDate, string DeliveryMethod, string Status, int RouteOrder);
 public record ManagerTeamOverviewDto(Guid Id, string TeamName, string TeamType,
+    string Status, DateTime? StartedAt, Guid? StartedByStaffId,
+    DateTime? CompletedAt, Guid? CompletedByStaffId,
     List<ReceivingTeamMemberDto> Members,
     Guid? IntakeBatchId, string? IntakeBatchCode, string? IntakeBatchStatus,
     string? IntakeBatchRoute, decimal IntakeBatchWeight,

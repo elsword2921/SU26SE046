@@ -18,6 +18,10 @@ public interface IReceivingOperationsService
     Task<AutoBalanceResultDto> AutoBalanceShiftAsync(Guid shiftId);
     Task<ReceivingDispatchBoardDto> GetDispatchBoardAsync();
     Task<ManagerReceivingSetupDto> GetManagerSetupAsync();
+    Task<List<ManagerWarehouseOptionDto>> GetManagerWarehousesAsync();
+    Task<List<ManagerStaffOptionDto>> GetManagerReceivingStaffAsync(Guid? warehouseId = null);
+    Task<List<ManagerShiftOverviewDto>> GetManagerShiftsAsync(
+        Guid? warehouseId = null, DateTime? fromDate = null, DateTime? toDate = null);
     Task AssignRequestAsync(AssignDonationRequestDto dto);
     Task<List<ReceivingBatchDto>> GetMyBatchesAsync(Guid staffId);
     Task<ReceivingBatchDto?> GetMyBatchAsync(Guid staffId, Guid batchId);

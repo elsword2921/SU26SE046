@@ -80,6 +80,22 @@ public class ReceivingOperationsController(IReceivingOperationsService service) 
     [Authorize(Roles = "Manager")]
     public async Task<IActionResult> ManagerSetup() => Ok(await service.GetManagerSetupAsync());
 
+    [HttpGet("manager/warehouses")]
+    [Authorize(Roles = "Manager")]
+    public async Task<IActionResult> ManagerWarehouses()
+        => Ok(await service.GetManagerWarehousesAsync());
+
+    [HttpGet("manager/receiving-staff")]
+    [Authorize(Roles = "Manager")]
+    public async Task<IActionResult> ManagerReceivingStaff([FromQuery] Guid? warehouseId)
+        => Ok(await service.GetManagerReceivingStaffAsync(warehouseId));
+
+    [HttpGet("manager/shifts")]
+    [Authorize(Roles = "Manager")]
+    public async Task<IActionResult> ManagerShifts(
+        [FromQuery] Guid? warehouseId, [FromQuery] DateTime? fromDate, [FromQuery] DateTime? toDate)
+        => Ok(await service.GetManagerShiftsAsync(warehouseId, fromDate, toDate));
+
     [HttpPost("assign-request")]
     [Authorize(Roles = "Manager")]
     public async Task<IActionResult> AssignRequest(AssignDonationRequestDto dto)

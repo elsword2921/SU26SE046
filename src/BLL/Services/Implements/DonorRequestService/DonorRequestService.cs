@@ -53,6 +53,9 @@ namespace BLL.Services.Implements.DonorRequestService
             if (dto.PickupDate.HasValue && dto.PickupDate.Value.Date < GetEarliestPickupDate())
                 throw new InvalidOperationException(
                     "Ngày tiếp nhận không hợp lệ. Từ 11:00, ngày sớm nhất có thể chọn là ngày mai.");
+            if (dto.PickupDate.HasValue && IsWeekend(dto.PickupDate.Value))
+                throw new InvalidOperationException(
+                    "Hệ thống chỉ tiếp nhận quyên góp từ Thứ Hai đến Thứ Sáu.");
 
             var requestId = Guid.NewGuid();
             var now = DateTime.UtcNow;
@@ -95,8 +98,13 @@ namespace BLL.Services.Implements.DonorRequestService
             var vietnamNow = VietnamTime.Now;
             var currentMinutes = vietnamNow.Hour * 60 + vietnamNow.Minute;
             const int cutoffMinutes = 11 * 60;
-            return vietnamNow.Date.AddDays(currentMinutes >= cutoffMinutes ? 1 : 0);
+            var earliest = vietnamNow.Date.AddDays(currentMinutes >= cutoffMinutes ? 1 : 0);
+            while (IsWeekend(earliest)) earliest = earliest.AddDays(1);
+            return earliest;
         }
+
+        private static bool IsWeekend(DateTime date) =>
+            date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
         public async Task UpdateAsync(Guid donorId, Guid requestId, UpdateDonorRequestDto dto)
         {
             var request =
@@ -130,6 +138,9 @@ namespace BLL.Services.Implements.DonorRequestService
             if (dto.PickupDate.Date < GetEarliestPickupDate())
                 throw new InvalidOperationException(
                     "Ngày tiếp nhận không hợp lệ. Từ 11:00, ngày sớm nhất có thể chọn là ngày mai.");
+            if (IsWeekend(dto.PickupDate))
+                throw new InvalidOperationException(
+                    "Hệ thống chỉ tiếp nhận quyên góp từ Thứ Hai đến Thứ Sáu.");
 
             request.WarehouseId = dto.WarehouseId;
             request.PickupDate = DateTime.SpecifyKind(dto.PickupDate, DateTimeKind.Unspecified);

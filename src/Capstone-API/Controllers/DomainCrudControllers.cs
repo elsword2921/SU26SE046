@@ -35,6 +35,17 @@ public class CategoryController(AppDbContext context) : ControllerBase
     public async Task<ActionResult<Category>> Create(Category category)
     {
         if (string.IsNullOrWhiteSpace(category.Type)) return BadRequest(new { message = "Category type is required." });
+        category.Code = category.Code.Trim().ToUpperInvariant();
+        category.Name = category.Name.Trim();
+        if (string.IsNullOrWhiteSpace(category.Code) || string.IsNullOrWhiteSpace(category.Name))
+            return BadRequest(new { message = "Category code and name are required." });
+        if (category.Type == "ConditionGrade" && category.Code is not ("GRADE_A" or "GRADE_B" or "GRADE_C"))
+            return BadRequest(new { message = "The current classification flow only supports GRADE_A, GRADE_B and GRADE_C." });
+        if (await context.Categories.AnyAsync(x => x.Code == category.Code))
+            return Conflict(new { message = $"Category code {category.Code} already exists." });
+        if (await context.Categories.AnyAsync(x => x.Type == category.Type && x.ParentId == category.ParentId
+            && x.Name == category.Name))
+            return Conflict(new { message = $"Category name {category.Name} already exists in this configuration type." });
         await using var transaction = await context.Database.BeginTransactionAsync();
         var siblings = await context.Categories.Where(x => x.IsActive != false && x.Type == category.Type).ToListAsync();
         var maximumOrder = siblings.Count + 1;
@@ -46,8 +57,6 @@ public class CategoryController(AppDbContext context) : ControllerBase
             sibling.UpdateAt = DateTime.UtcNow;
         }
         category.Id = Guid.NewGuid();
-        category.Code = category.Code.Trim().ToUpperInvariant();
-        category.Name = category.Name.Trim();
         category.CreateAt = DateTime.UtcNow;
         category.UpdateAt = null;
         category.DeleteAt = null;
@@ -61,6 +70,19 @@ public class CategoryController(AppDbContext context) : ControllerBase
     [HttpPut("{id:guid}")]
     public async Task<ActionResult<Category>> Update(Guid id, Category input)
     {
+        input.Code = input.Code.Trim().ToUpperInvariant();
+        input.Name = input.Name.Trim();
+        if (string.IsNullOrWhiteSpace(input.Code) || string.IsNullOrWhiteSpace(input.Name))
+            return BadRequest(new { message = "Category code and name are required." });
+        if (input.Type == "ConditionGrade" && input.Code is not ("GRADE_A" or "GRADE_B" or "GRADE_C"))
+            return BadRequest(new { message = "The current classification flow only supports GRADE_A, GRADE_B and GRADE_C." });
+        if (input.Type == "ConditionGrade" && input.Code is "GRADE_B" or "GRADE_C"
+            && input.MinimumMatchCount.HasValue)
+        {
+            var questionCount = await context.ConditionQuestions.CountAsync(x => x.IsActive != false);
+            if (input.MinimumMatchCount < 1 || input.MinimumMatchCount > questionCount)
+                return BadRequest(new { message = $"Minimum match count must be between 1 and {questionCount}." });
+        }
         await using var transaction = await context.Database.BeginTransactionAsync();
         var category = await context.Categories.FirstOrDefaultAsync(x => x.Id == id && x.IsActive != false);
         if (category is null) return NotFound();
