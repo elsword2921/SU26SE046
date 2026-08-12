@@ -45,6 +45,55 @@ namespace DAL
         {
         }
 
+        public override int SaveChanges(bool acceptAllChangesOnSuccess)
+        {
+            NormalizeSystemTimestampsToVietnamTime();
+            return base.SaveChanges(acceptAllChangesOnSuccess);
+        }
+
+        public override Task<int> SaveChangesAsync(
+            bool acceptAllChangesOnSuccess,
+            CancellationToken cancellationToken = default)
+        {
+            NormalizeSystemTimestampsToVietnamTime();
+            return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        }
+
+        private void NormalizeSystemTimestampsToVietnamTime()
+        {
+            var vietnamZone = ResolveVietnamTimeZone();
+            foreach (var entry in ChangeTracker.Entries()
+                         .Where(x => x.State is EntityState.Added or EntityState.Modified))
+            {
+                foreach (var property in entry.Properties.Where(x =>
+                             entry.State == EntityState.Added || x.IsModified))
+                {
+                    if (property.CurrentValue is DateTime value && value.Kind == DateTimeKind.Utc)
+                    {
+                        var local = TimeZoneInfo.ConvertTimeFromUtc(value, vietnamZone);
+                        property.CurrentValue = DateTime.SpecifyKind(local, DateTimeKind.Unspecified);
+                    }
+                    else if (property.CurrentValue is DateTimeOffset offset
+                             && offset.Offset == TimeSpan.Zero)
+                    {
+                        property.CurrentValue = TimeZoneInfo.ConvertTime(offset, vietnamZone);
+                    }
+                }
+            }
+        }
+
+        private static TimeZoneInfo ResolveVietnamTimeZone()
+        {
+            foreach (var id in new[] { "Asia/Ho_Chi_Minh", "SE Asia Standard Time" })
+            {
+                try { return TimeZoneInfo.FindSystemTimeZoneById(id); }
+                catch (TimeZoneNotFoundException) { }
+                catch (InvalidTimeZoneException) { }
+            }
+
+            throw new TimeZoneNotFoundException("Vietnam time zone could not be resolved.");
+        }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -217,10 +266,42 @@ namespace DAL
                 .OnDelete(DeleteBehavior.SetNull);
 
             modelBuilder.Entity<IntakeBatch>()
+                .HasOne(x => x.ClassificationTeam)
+                .WithMany(x => x.ClassificationBatches)
+                .HasForeignKey(x => x.ClassificationTeamId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<IntakeBatch>()
+                .HasOne(x => x.CurrentArea)
+                .WithMany(x => x.IntakeBatches)
+                .HasForeignKey(x => x.CurrentAreaId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<IntakeBatch>()
+                .HasOne(x => x.CurrentAreaGroup)
+                .WithMany()
+                .HasForeignKey(x => x.CurrentAreaGroupId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<IntakeBatch>().HasOne(x => x.WarehouseReceivedByStaff).WithMany()
+                .HasForeignKey(x => x.WarehouseReceivedByStaffId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<IntakeBatch>().HasOne(x => x.ClassificationAssignedByManager).WithMany()
+                .HasForeignKey(x => x.ClassificationAssignedByManagerId).OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<IntakeBatch>()
                 .HasOne(x => x.ClassificationReceivedByStaff)
                 .WithMany()
                 .HasForeignKey(x => x.ClassificationReceivedByStaffId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<IntakeBatch>().HasOne(x => x.CountedByStaff).WithMany()
+                .HasForeignKey(x => x.CountedByStaffId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<IntakeBatch>().HasOne(x => x.ClassificationStartedByStaff).WithMany()
+                .HasForeignKey(x => x.ClassificationStartedByStaffId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<IntakeBatch>().HasOne(x => x.ClassificationCompletedByStaff).WithMany()
+                .HasForeignKey(x => x.ClassificationCompletedByStaffId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<IntakeBatch>().HasOne(x => x.ClassifiedAreaPlacedByStaff).WithMany()
+                .HasForeignKey(x => x.ClassifiedAreaPlacedByStaffId).OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<TeamMember>()
                 .HasIndex(x => new { x.TeamId, x.StaffId })
@@ -241,6 +322,11 @@ namespace DAL
                 .WithMany()
                 .HasForeignKey(x => x.GroupId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<ClassifiedBatch>().HasOne(x => x.PlacedInClassificationAreaByStaff).WithMany()
+                .HasForeignKey(x => x.PlacedInClassificationAreaByStaffId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<ClassifiedBatch>().HasOne(x => x.RemovedFromClassificationAreaByStaff).WithMany()
+                .HasForeignKey(x => x.RemovedFromClassificationAreaByStaffId).OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<ClassifiedBatch>()
                 .Property(x => x.GroupKey)

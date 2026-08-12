@@ -33,6 +33,14 @@ namespace Capstone_API.Controllers
             });
         }
 
+        [HttpGet("pickup-windows")]
+        [Authorize(Roles = "Donor")]
+        public async Task<IActionResult> PickupWindows(
+            [FromQuery] DateTime date,
+            [FromQuery] double latitude,
+            [FromQuery] double longitude) =>
+            Ok(await _service.GetPickupAvailabilityAsync(date, latitude, longitude));
+
 
 
         [HttpPut("{id}")]

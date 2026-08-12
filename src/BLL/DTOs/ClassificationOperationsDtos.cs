@@ -1,15 +1,30 @@
 namespace BLL.DTOs;
 
 public record ClassificationBatchSummaryDto(Guid Id, string BatchCode, string RouteName,
-    DateTime IntakeDate, decimal TotalWeight, string Status, int DonationRequests, int ClassifiedItems);
+    DateTime IntakeDate, decimal TotalWeight, string Status, int DonationRequests, int ClassifiedItems,
+    int? CountedItemCount, decimal? CountedTotalWeight, DateTime? CountedAt,
+    string? ClassificationAreaName, DateTime? ClassifiedAreaPlacedAt,
+    Guid? ClassificationTeamId = null, string? ClassificationTeamName = null,
+    string? TeamStatus = null, string? CurrentAreaName = null);
 
 public record ClassificationItemDto(Guid Id, string ItemCode, string FabricType, string GarmentGroup,
     string ClothingType, string Gender, string TargetUser, string Size, string ConditionGrade,
-    string ProcessingDirection, IReadOnlyList<string> ImageUrls, string? Notes, DateTime ClassifiedAt);
+    string ProcessingDirection, IReadOnlyList<string> ImageUrls, string? Notes, DateTime ClassifiedAt,
+    Guid? FabricTypeId, Guid? GarmentGroupId, Guid? ClothingTypeId, Guid? GenderId,
+    Guid? TargetUserId, Guid? SizeId, IReadOnlyList<ClassificationAnswerDto> Answers);
 
 public record ClassificationBatchDetailDto(Guid Id, string BatchCode, string RouteName,
     DateTime IntakeDate, decimal TotalWeight, string Status, int DonationRequests,
+    int? CountedItemCount, decimal? CountedTotalWeight, string? CountingNotes, DateTime? CountedAt,
+    string? ClassificationAreaName, DateTime? ClassifiedAreaPlacedAt,
     IReadOnlyList<ClassificationItemDto> Items);
+
+public class CountClassificationBatchDto
+{
+    public int ItemCount { get; set; }
+    public decimal TotalWeightKg { get; set; }
+    public string? Notes { get; set; }
+}
 
 public record ClassificationAnswerDto(Guid QuestionId, Guid AnswerId);
 
@@ -39,12 +54,30 @@ public record ClassificationCatalogDto(IReadOnlyList<CategoryOptionDto> FabricTy
 public record GroupedClassifiedBatchDto(Guid Id, string BatchCode, DateTime ClassificationDate,
     string FabricType, string GarmentGroup, string ClothingType, string Gender, string TargetUser,
     string Size, string ConditionGrade, string ProcessingDirection, int TotalItem, string Status,
+    decimal TotalWeight, string? ClassificationAreaName, DateTime? PlacedInClassificationAreaAt,
     IReadOnlyList<string> DonationRequestCodes);
 
 public record GroupedClassifiedBatchDetailDto(Guid Id, string BatchCode, DateTime ClassificationDate,
     string FabricType, string GarmentGroup, string ClothingType, string Gender, string TargetUser,
     string Size, string ConditionGrade, string ProcessingDirection, int TotalItem, string Status,
+    decimal TotalWeight, string? ClassificationAreaName, DateTime? PlacedInClassificationAreaAt,
     IReadOnlyList<string> DonationRequestCodes, IReadOnlyList<ClassificationItemDto> Items);
 
 public record SendGroupedBatchesToWarehouseDto(IReadOnlyList<Guid> GroupedBatchIds);
 public record SendGroupedBatchesToWarehouseResultDto(int Sent, int Skipped);
+
+public record AssignClassificationBatchDto(Guid TeamId);
+public record ClassificationStaffOptionDto(Guid Id, string FullName, string UserName,
+    string PhoneNumber, Guid? WarehouseId);
+public record ClassificationTeamDto(Guid Id, Guid ShiftId, string TeamName, string Status,
+    DateTime ShiftDate, TimeSpan StartTime, TimeSpan EndTime, Guid WarehouseId, string WarehouseName,
+    DateTime? StartedAt, DateTime? CompletedAt, IReadOnlyList<ReceivingTeamMemberDto> Members,
+    int AssignedBatches, int CompletedBatches);
+public record ClassificationManagementBatchDto(Guid Id, string BatchCode, string Status,
+    Guid WarehouseId, string WarehouseName, decimal TotalWeight, int DonationRequests,
+    Guid? TeamId, string? TeamName, string? CurrentAreaName, DateTime? SentAt);
+public record ClassificationManagementBoardDto(
+    IReadOnlyList<ManagerWarehouseOptionDto> Warehouses,
+    IReadOnlyList<ClassificationStaffOptionDto> Staff,
+    IReadOnlyList<ClassificationTeamDto> Teams,
+    IReadOnlyList<ClassificationManagementBatchDto> Batches);

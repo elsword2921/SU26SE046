@@ -1,4 +1,5 @@
 using BLL.DTOs;
+using BLL.Common;
 using BLL.Services.Interfaces.WarehouseOperations;
 using BLL.Services.Implements.Notifications;
 using DAL;
@@ -46,6 +47,7 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
         };
         context.Warehouses.Add(warehouse);
         await context.SaveChangesAsync();
+        await EnsureDefaultLayoutAsync(warehouse.Id);
         return warehouse.Id;
     }
 
@@ -78,9 +80,24 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
                 WeightKg = x.Sum(i => i.TotalWeight)
             })
             .ToDictionaryAsync(x => x.LocationId);
+        var stagingBatches = await context.IntakeBatches.AsNoTracking()
+            .Include(x => x.ClassificationTeam)
+            .Include(x => x.CurrentAreaGroup)
+            .Include(x => x.WarehouseReceivedByStaff)
+            .Where(x => x.WarehouseId == warehouse.Id && x.CurrentAreaId.HasValue && x.IsActive != false)
+            .Select(x => new
+            {
+                x.Id, x.CurrentAreaId, x.BatchCode, x.Status, x.TotalWeight, x.IntakeDate,
+                DonationRequests = x.IntakeBatchDonationRequests.Count(r => r.IsActive != false),
+                TeamName = x.ClassificationTeam != null ? x.ClassificationTeam.TeamName : null,
+                GroupName = x.CurrentAreaGroup != null ? x.CurrentAreaGroup.GroupName : null,
+                x.WarehouseReceivedAt,
+                WarehouseReceivedBy = x.WarehouseReceivedByStaff != null
+                    ? x.WarehouseReceivedByStaff.FullName : null
+            }).ToListAsync();
 
         var areaDtos = areas.Select(area => new WarehouseAreaLayoutDto(
-            area.Id, area.AreaName, area.Description, area.CapacityKg, area.CurrentKg,
+            area.Id, area.AreaName, area.Description, area.AreaType, area.CapacityKg, area.CurrentKg,
             groups.Where(x => x.AreaId == area.Id).Select(x => new WarehouseGroupLayoutDto(
                 x.Id, x.GroupName, x.Description, x.CapacityKg, x.CurrentKg)).ToList(),
             locations.Where(x => x.AreaId == area.Id).Select(x =>
@@ -89,9 +106,13 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
                 return new WarehouseLocationLayoutDto(x.Id, x.AreaGroupId, x.LocationCode, x.AisleCode, x.RackCode,
                     x.ShelfCode, x.BinCode, x.PreferredGarmentGroup, x.PreferredProcessingDirection,
                     x.CapacityKg, stats?.WeightKg ?? 0, x.Status, stats?.Count ?? 0, stats?.Quantity ?? 0);
-            }).ToList())).ToList();
+            }).ToList(),
+            stagingBatches.Where(x => x.CurrentAreaId == area.Id)
+                .Select(x => new WarehouseStagingBatchDto(x.Id, x.BatchCode, x.Status,
+                    x.TotalWeight, x.IntakeDate, x.DonationRequests, x.TeamName,
+                    x.GroupName, x.WarehouseReceivedAt, x.WarehouseReceivedBy)).ToList())).ToList();
         var actualWarehouseWeightKg = inventoryStats.Values.Sum(x => x.WeightKg);
-        var configuredWarehouseCapacityKg = areas.Sum(x => x.CapacityKg);
+        var configuredWarehouseCapacityKg = areas.Where(x => x.AreaType == "Storage").Sum(x => x.CapacityKg);
         return new WarehouseLayoutDto(warehouse.Id, warehouse.WarehouseName, warehouse.Address,
             configuredWarehouseCapacityKg, actualWarehouseWeightKg, areaDtos);
     }
@@ -761,9 +782,51 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
 
     private async Task EnsureDefaultLayoutAsync(Guid warehouseId)
     {
-        if (await context.StorageLocations.AnyAsync(x => x.WarehouseId == warehouseId && x.IsActive != false)) return;
         var warehouseCapacity = await context.Warehouses.Where(x => x.Id == warehouseId)
             .Select(x => x.TotalCapacityKg).SingleAsync();
+        var stagingDefinitions = new[]
+        {
+            ("Receiving", "Khu nhận đồ", "Khu tiếp nhận Intake Batch do Receiving Staff đưa về."),
+            ("Unclassified", "Khu chưa phân loại", "Khu Intake Batch chờ Classification Staff xử lý."),
+            ("Classified", "Khu đã phân loại", "Khu Intake Batch đã hoàn tất phân loại.")
+        };
+        foreach (var (type, name, description) in stagingDefinitions)
+        {
+            var area = await context.WarehouseAreas.Include(x => x.Groups)
+                .FirstOrDefaultAsync(x => x.WarehouseId == warehouseId
+                    && x.AreaType == type && x.IsActive != false);
+            if (area is null)
+            {
+                area = new WarehouseArea
+                {
+                    Id = Guid.NewGuid(), WarehouseId = warehouseId, AreaType = type,
+                    AreaName = name, Description = description, CapacityKg = warehouseCapacity,
+                    CurrentKg = 0, CreateAt = VietnamTime.Now, IsActive = true
+                };
+                context.WarehouseAreas.Add(area);
+            }
+            var prefix = type switch
+            {
+                "Receiving" => "RECEIVING",
+                "Unclassified" => "UNCLASSIFIED",
+                _ => "CLASSIFIED"
+            };
+            for (var index = 1; index <= 2; index++)
+                if (!area.Groups.Any(x => x.IsActive != false && x.GroupName == $"Dãy {prefix}-{index:00}"))
+                    context.AreaGroups.Add(new AreaGroup
+                    {
+                        Id = Guid.NewGuid(), AreaId = area.Id,
+                        GroupName = $"Dãy {prefix}-{index:00}",
+                        Description = $"Dãy trung chuyển {name.ToLowerInvariant()} số {index:00}",
+                        CapacityKg = warehouseCapacity / 2m, CurrentKg = 0,
+                        CreateAt = VietnamTime.Now, IsActive = true
+                    });
+        }
+        if (await context.StorageLocations.AnyAsync(x => x.WarehouseId == warehouseId && x.IsActive != false))
+        {
+            await context.SaveChangesAsync();
+            return;
+        }
         var areaCapacity = warehouseCapacity / 3m;
         var locationCapacity = areaCapacity / 6m;
         var definitions = new[]
@@ -777,6 +840,7 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
             var area = new WarehouseArea
             {
                 Id = Guid.NewGuid(), WarehouseId = warehouseId, AreaName = areaName,
+                AreaType = "Storage",
                 Description = $"Khu vực kiểm soát cho hướng xử lý {direction}", CapacityKg = areaCapacity,
                 CurrentKg = 0, CreateAt = DateTime.UtcNow, IsActive = true
             };
@@ -827,7 +891,9 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
         x.Items.OrderBy(i => i.ItemCode).Select(i =>
             new ClassificationItemDto(i.Id, i.ItemCode, i.FabricType, i.GarmentGroup,
                 i.ClothingType, i.Gender, i.TargetUser, i.Size, Grade(i.ConditionRating),
-                i.ProcessingDirection, i.ImageUrls ?? [], i.Notes, i.ClassifiedAt)).ToList());
+                i.ProcessingDirection, i.ImageUrls ?? [], i.Notes, i.ClassifiedAt,
+                i.FabricTypeId, i.GarmentGroupId, i.ClothingTypeId, i.GenderId,
+                i.TargetUserId, i.SizeId, [])).ToList());
 
     private static string BuildReceiptNotes(int expectedCount, ConfirmWarehouseReceiptDto dto)
     {

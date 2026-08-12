@@ -4,6 +4,7 @@ using DAL;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DAL.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260811155503_AddClassificationTeamWarehouseStagingFlow")]
+    partial class AddClassificationTeamWarehouseStagingFlow
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -974,9 +977,6 @@ namespace DAL.Migrations
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<Guid?>("CurrentAreaGroupId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.Property<Guid?>("CurrentAreaId")
                         .HasColumnType("uniqueidentifier");
 
@@ -1049,8 +1049,6 @@ namespace DAL.Migrations
                     b.HasIndex("ClassifiedAreaPlacedByStaffId");
 
                     b.HasIndex("CountedByStaffId");
-
-                    b.HasIndex("CurrentAreaGroupId");
 
                     b.HasIndex("CurrentAreaId");
 
@@ -2830,11 +2828,6 @@ namespace DAL.Migrations
                         .HasForeignKey("CountedByStaffId")
                         .OnDelete(DeleteBehavior.Restrict);
 
-                    b.HasOne("DAL.Models.AreaGroup", "CurrentAreaGroup")
-                        .WithMany()
-                        .HasForeignKey("CurrentAreaGroupId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("DAL.Models.WarehouseArea", "CurrentArea")
                         .WithMany("IntakeBatches")
                         .HasForeignKey("CurrentAreaId")
@@ -2877,8 +2870,6 @@ namespace DAL.Migrations
                     b.Navigation("CountedByStaff");
 
                     b.Navigation("CurrentArea");
-
-                    b.Navigation("CurrentAreaGroup");
 
                     b.Navigation("ReceivingTeam");
 

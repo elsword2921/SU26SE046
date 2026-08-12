@@ -1,3 +1,4 @@
+using BLL.Common;
 using BLL.DTOs;
 using BLL.Services.Interfaces.ManagerDashboard;
 using DAL;
@@ -67,7 +68,7 @@ public class ManagerDashboardService(AppDbContext context) : IManagerDashboardSe
         int Intake(params string[] statuses) => statuses.Sum(x => intakeCounts.GetValueOrDefault(x));
         int Classified(params string[] statuses) => statuses.Sum(x => classifiedCounts.GetValueOrDefault(x));
 
-        var today = DateTime.UtcNow.Date;
+        var today = VietnamTime.Today;
         var trendStart = periodStart ?? today.AddDays(-6);
         var trendEnd = periodEnd ?? today.AddDays(1);
         var requestDays = await requests.Where(x => x.CreateAt >= trendStart && x.CreateAt < trendEnd)
@@ -110,13 +111,13 @@ public class ManagerDashboardService(AppDbContext context) : IManagerDashboardSe
                 new("assigned", "Đã phân công", Intake("Planned")),
                 new("collecting", "Đang thu gom", Intake("Receiving")),
                 new("collected", "Đã thu gom", Intake("Completed")),
-                new("classification", "Đã gửi phân loại", Intake("SentToClassification", "PendingClassification")),
-                new("classified", "Đã phân loại", Intake("Classified"))
+                new("classification", "Đã gửi phân loại", Intake("SentToClassification", "AwaitingClassificationCount", "ReadyForClassification")),
+                new("classified", "Đã phân loại", Intake("InClassifiedArea"))
             ],
             [
-                new("waiting", "Chờ phân loại", Intake("SentToClassification", "PendingClassification")),
+                new("waiting", "Chờ kiểm đếm/phân loại", Intake("SentToClassification", "AwaitingClassificationCount", "ReadyForClassification")),
                 new("classifying", "Đang phân loại", Intake("Classifying")),
-                new("classified", "Đã phân loại", Intake("Classified"))
+                new("classified", "Trong khu đồ đã phân loại", Intake("InClassifiedArea"))
             ],
             [
                 new("open", "Đang gom nhóm", Classified("Open")),

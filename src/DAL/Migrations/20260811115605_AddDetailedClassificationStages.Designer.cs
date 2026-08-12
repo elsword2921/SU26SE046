@@ -4,6 +4,7 @@ using DAL;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DAL.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260811115605_AddDetailedClassificationStages")]
+    partial class AddDetailedClassificationStages
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -916,12 +919,6 @@ namespace DAL.Migrations
                     b.Property<string>("ClassificationAreaName")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<DateTime?>("ClassificationAssignedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid?>("ClassificationAssignedByManagerId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.Property<DateTime?>("ClassificationCompletedAt")
                         .HasColumnType("datetime2");
 
@@ -938,9 +935,6 @@ namespace DAL.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<Guid?>("ClassificationStartedByStaffId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid?>("ClassificationTeamId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTime?>("ClassifiedAreaPlacedAt")
@@ -972,12 +966,6 @@ namespace DAL.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<Guid?>("CreatedBy")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid?>("CurrentAreaGroupId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid?>("CurrentAreaId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTime?>("DeleteAt")
@@ -1028,15 +1016,7 @@ namespace DAL.Migrations
                     b.Property<Guid>("WarehouseId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<DateTime?>("WarehouseReceivedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid?>("WarehouseReceivedByStaffId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.HasKey("Id");
-
-                    b.HasIndex("ClassificationAssignedByManagerId");
 
                     b.HasIndex("ClassificationCompletedByStaffId");
 
@@ -1044,21 +1024,13 @@ namespace DAL.Migrations
 
                     b.HasIndex("ClassificationStartedByStaffId");
 
-                    b.HasIndex("ClassificationTeamId");
-
                     b.HasIndex("ClassifiedAreaPlacedByStaffId");
 
                     b.HasIndex("CountedByStaffId");
 
-                    b.HasIndex("CurrentAreaGroupId");
-
-                    b.HasIndex("CurrentAreaId");
-
                     b.HasIndex("ReceivingTeamId");
 
                     b.HasIndex("WarehouseId");
-
-                    b.HasIndex("WarehouseReceivedByStaffId");
 
                     b.HasIndex("ShiftId", "ReceivingTeamId")
                         .IsUnique()
@@ -2419,12 +2391,6 @@ namespace DAL.Migrations
                     b.Property<bool?>("IsActive")
                         .HasColumnType("bit");
 
-                    b.Property<double?>("Latitude")
-                        .HasColumnType("float");
-
-                    b.Property<double?>("Longitude")
-                        .HasColumnType("float");
-
                     b.Property<string>("PhoneNumber")
                         .HasColumnType("nvarchar(max)");
 
@@ -2454,10 +2420,6 @@ namespace DAL.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("AreaName")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("AreaType")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
@@ -2795,11 +2757,6 @@ namespace DAL.Migrations
 
             modelBuilder.Entity("DAL.Models.IntakeBatch", b =>
                 {
-                    b.HasOne("DAL.Models.User", "ClassificationAssignedByManager")
-                        .WithMany()
-                        .HasForeignKey("ClassificationAssignedByManagerId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("DAL.Models.User", "ClassificationCompletedByStaff")
                         .WithMany()
                         .HasForeignKey("ClassificationCompletedByStaffId")
@@ -2815,11 +2772,6 @@ namespace DAL.Migrations
                         .HasForeignKey("ClassificationStartedByStaffId")
                         .OnDelete(DeleteBehavior.Restrict);
 
-                    b.HasOne("DAL.Models.OperationalTeam", "ClassificationTeam")
-                        .WithMany("ClassificationBatches")
-                        .HasForeignKey("ClassificationTeamId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("DAL.Models.User", "ClassifiedAreaPlacedByStaff")
                         .WithMany()
                         .HasForeignKey("ClassifiedAreaPlacedByStaffId")
@@ -2828,16 +2780,6 @@ namespace DAL.Migrations
                     b.HasOne("DAL.Models.User", "CountedByStaff")
                         .WithMany()
                         .HasForeignKey("CountedByStaffId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("DAL.Models.AreaGroup", "CurrentAreaGroup")
-                        .WithMany()
-                        .HasForeignKey("CurrentAreaGroupId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("DAL.Models.WarehouseArea", "CurrentArea")
-                        .WithMany("IntakeBatches")
-                        .HasForeignKey("CurrentAreaId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("DAL.Models.OperationalTeam", "ReceivingTeam")
@@ -2857,36 +2799,21 @@ namespace DAL.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("DAL.Models.User", "WarehouseReceivedByStaff")
-                        .WithMany()
-                        .HasForeignKey("WarehouseReceivedByStaffId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("ClassificationAssignedByManager");
-
                     b.Navigation("ClassificationCompletedByStaff");
 
                     b.Navigation("ClassificationReceivedByStaff");
 
                     b.Navigation("ClassificationStartedByStaff");
 
-                    b.Navigation("ClassificationTeam");
-
                     b.Navigation("ClassifiedAreaPlacedByStaff");
 
                     b.Navigation("CountedByStaff");
-
-                    b.Navigation("CurrentArea");
-
-                    b.Navigation("CurrentAreaGroup");
 
                     b.Navigation("ReceivingTeam");
 
                     b.Navigation("Shift");
 
                     b.Navigation("Warehouse");
-
-                    b.Navigation("WarehouseReceivedByStaff");
                 });
 
             modelBuilder.Entity("DAL.Models.IntakeBatchDonationRequest", b =>
@@ -3379,8 +3306,6 @@ namespace DAL.Migrations
 
             modelBuilder.Entity("DAL.Models.OperationalTeam", b =>
                 {
-                    b.Navigation("ClassificationBatches");
-
                     b.Navigation("IntakeBatches");
 
                     b.Navigation("Members");
@@ -3453,8 +3378,6 @@ namespace DAL.Migrations
             modelBuilder.Entity("DAL.Models.WarehouseArea", b =>
                 {
                     b.Navigation("Groups");
-
-                    b.Navigation("IntakeBatches");
                 });
 #pragma warning restore 612, 618
         }

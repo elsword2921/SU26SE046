@@ -33,5 +33,6 @@ public interface IReceivingOperationsService
     Task RescheduleAsync(Guid staffId, Guid batchId, Guid requestId, ReschedulePickupDto dto);
     Task RejectAsync(Guid staffId, Guid batchId, Guid requestId, RejectPickupDto dto);
     Task CompleteBatchAsync(Guid staffId, Guid batchId);
+    Task ReceiveBatchAtWarehouseAsync(Guid staffId, Guid batchId, ReceiveIntakeBatchAtWarehouseDto dto);
     Task SendToClassificationAsync(Guid staffId, Guid batchId);
 }

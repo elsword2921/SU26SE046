@@ -6,8 +6,13 @@ public record WarehouseDashboardDto(int PendingReceipt, int AwaitingPutaway, int
 public record WarehouseLayoutDto(Guid WarehouseId, string WarehouseName, string Address,
     decimal CapacityKg, decimal CurrentWeightKg, IReadOnlyList<WarehouseAreaLayoutDto> Areas);
 public record WarehouseAreaLayoutDto(Guid Id, string AreaName, string? Description,
-    decimal CapacityKg, decimal CurrentWeightKg, IReadOnlyList<WarehouseGroupLayoutDto> Groups,
-    IReadOnlyList<WarehouseLocationLayoutDto> Locations);
+    string AreaType, decimal CapacityKg, decimal CurrentWeightKg,
+    IReadOnlyList<WarehouseGroupLayoutDto> Groups,
+    IReadOnlyList<WarehouseLocationLayoutDto> Locations,
+    IReadOnlyList<WarehouseStagingBatchDto> IntakeBatches);
+public record WarehouseStagingBatchDto(Guid Id, string BatchCode, string Status,
+    decimal TotalWeight, DateTime IntakeDate, int DonationRequests, string? TeamName,
+    string? GroupName, DateTime? WarehouseReceivedAt, string? WarehouseReceivedBy);
 public record WarehouseGroupLayoutDto(Guid Id, string GroupName, string? Description,
     decimal CapacityKg, decimal CurrentWeightKg);
 public record WarehouseLocationLayoutDto(Guid Id, Guid? AreaGroupId, string LocationCode, string AisleCode,

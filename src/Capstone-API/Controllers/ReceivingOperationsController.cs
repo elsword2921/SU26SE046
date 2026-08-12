@@ -158,5 +158,10 @@ public class ReceivingOperationsController(IReceivingOperationsService service) 
     public async Task<IActionResult> SendToClassification(Guid batchId)
     { await service.SendToClassificationAsync(CurrentUserId, batchId); return NoContent(); }
 
+    [HttpPost("my-batches/{batchId:guid}/receive-at-warehouse")]
+    [Authorize(Roles = "ReceivingStaff")]
+    public async Task<IActionResult> ReceiveAtWarehouse(Guid batchId, ReceiveIntakeBatchAtWarehouseDto dto)
+    { await service.ReceiveBatchAtWarehouseAsync(CurrentUserId, batchId, dto); return NoContent(); }
+
     private Guid CurrentUserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 }

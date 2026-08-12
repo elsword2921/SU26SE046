@@ -13,5 +13,10 @@ namespace BLL.Services.Interfaces.DonorRequestService
         Task<List<DonorRequestSearchResultDto>> SearchByPhoneNumberAsync(string phoneNumber);
 
         Task<List<DonorRequestSearchResultDto>> GetByDonorIdAsync(Guid donorId);
+
+        Task<DonorPickupAvailabilityDto> GetPickupAvailabilityAsync(
+            DateTime date,
+            double latitude,
+            double longitude);
     }
 }

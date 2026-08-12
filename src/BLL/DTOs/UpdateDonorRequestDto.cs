@@ -12,6 +12,8 @@ namespace BLL.DTOs
 
         public string PickupAddress { get; set; }
 
-        public Guid WarehouseId { get; set; }
+        public double? PickupLatitude { get; set; }
+
+        public double? PickupLongitude { get; set; }
     }
 }

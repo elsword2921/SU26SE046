@@ -15,4 +15,5 @@ public class OperationalTeam : BaseEntity
     public virtual Shift Shift { get; set; } = null!;
     public virtual ICollection<TeamMember> Members { get; set; } = new List<TeamMember>();
     public virtual ICollection<IntakeBatch> IntakeBatches { get; set; } = new List<IntakeBatch>();
+    public virtual ICollection<IntakeBatch> ClassificationBatches { get; set; } = new List<IntakeBatch>();
 }

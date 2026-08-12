@@ -4,6 +4,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
+using BLL.Common;
 using BLL.DTOs;
 using BLL.Services.Interfaces.AuthService;
 using DAL;
@@ -84,7 +85,7 @@ public partial class AuthService(
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password), RoleId = role.Id,
             Address = request.Address, PhoneNumber = request.PhoneNumber,
             UserStatus = "PendingVerification", EmailConfirmed = false,
-            IsActive = false, CreateAt = DateTime.UtcNow
+            IsActive = false, CreateAt = VietnamTime.Now
         };
         dbContext.Users.Add(user);
         var code = CreateCode(user.Id);
@@ -111,7 +112,7 @@ public partial class AuthService(
             .Where(x => x.UserId == request.UserId && x.IsActive == true)
             .OrderByDescending(x => x.CreateAt).FirstOrDefaultAsync()
             ?? throw new InvalidOperationException("No active verification code was found.");
-        if (verification.ExpiresAt <= DateTime.UtcNow)
+        if (verification.ExpiresAt <= VietnamTime.Now)
             throw new InvalidOperationException("Verification code has expired. Please request a new code.");
         if (verification.FailedAttempts >= 5)
             throw new InvalidOperationException("Too many failed attempts. Please request a new code.");
@@ -124,12 +125,12 @@ public partial class AuthService(
             throw new InvalidOperationException("Verification code is incorrect.");
         }
 
-        verification.VerifiedAt = DateTime.UtcNow;
+        verification.VerifiedAt = VietnamTime.Now;
         verification.IsActive = false;
         user.EmailConfirmed = true;
         var activated = user.EmailConfirmed;
         if (activated) { user.UserStatus = "Active"; user.IsActive = true; }
-        user.UpdateAt = DateTime.UtcNow;
+        user.UpdateAt = VietnamTime.Now;
         await dbContext.SaveChangesAsync();
         return new VerificationResponse(user.EmailConfirmed, activated,
             activated ? "Account verification completed." : "Email verification failed.");
@@ -143,7 +144,7 @@ public partial class AuthService(
             throw new InvalidOperationException("Email is already verified.");
         var latest = await dbContext.UserVerificationCodes.Where(x => x.UserId == request.UserId)
             .OrderByDescending(x => x.CreateAt).FirstOrDefaultAsync();
-        if (latest?.CreateAt > DateTime.UtcNow.AddMinutes(-1))
+        if (latest?.CreateAt > VietnamTime.Now.AddMinutes(-1))
             throw new InvalidOperationException("Please wait one minute before requesting another code.");
         await dbContext.UserVerificationCodes
             .Where(x => x.UserId == request.UserId && x.IsActive == true)
@@ -159,7 +160,7 @@ public partial class AuthService(
         dbContext.UserVerificationCodes.Add(new UserVerificationCode
         {
             UserId = userId, CodeHash = HashCode(code),
-            ExpiresAt = DateTime.UtcNow.AddMinutes(5), CreateAt = DateTime.UtcNow, IsActive = true
+            ExpiresAt = VietnamTime.Now.AddMinutes(5), CreateAt = VietnamTime.Now, IsActive = true
         });
         return code;
     }

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
+using BLL.Common;
 
 namespace Capstone_API.Controllers;
 
@@ -39,7 +40,7 @@ public class NotificationsController(AppDbContext context) : ControllerBase
     {
         var item = await context.Notifications.FirstOrDefaultAsync(x => x.Id == id && x.UserId == UserId && x.IsActive != false);
         if (item is null) return NotFound();
-        item.IsRead = true; item.ReadAt = DateTime.UtcNow; item.UpdateAt = DateTime.UtcNow;
+        item.IsRead = true; item.ReadAt = VietnamTime.Now; item.UpdateAt = VietnamTime.Now;
         await context.SaveChangesAsync();
         return NoContent();
     }
@@ -49,7 +50,7 @@ public class NotificationsController(AppDbContext context) : ControllerBase
     {
         await context.Notifications.Where(x => x.UserId == UserId && !x.IsRead && x.IsActive != false)
             .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.IsRead, true)
-                .SetProperty(x => x.ReadAt, DateTime.UtcNow).SetProperty(x => x.UpdateAt, DateTime.UtcNow));
+                .SetProperty(x => x.ReadAt, VietnamTime.Now).SetProperty(x => x.UpdateAt, VietnamTime.Now));
         return NoContent();
     }
 

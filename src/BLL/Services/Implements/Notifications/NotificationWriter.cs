@@ -11,7 +11,7 @@ public static class NotificationWriter
         string message, string? targetUrl = null, Guid? actorId = null) => context.Notifications.Add(new Notification
         {
             Id = Guid.NewGuid(), UserId = userId, Type = type, Title = title, Message = message,
-            TargetUrl = targetUrl, IsRead = false, CreateAt = DateTime.UtcNow,
+            TargetUrl = targetUrl, IsRead = false, CreateAt = VietnamTime.Now,
             CreatedBy = actorId, IsActive = true
         });
     public static async Task NotifyManagersNewRequestAsync(AppDbContext context, DonationRequest request)
@@ -21,7 +21,7 @@ public static class NotificationWriter
             .Select(x => x.Id).ToListAsync();
         foreach (var managerId in managerIds)
             Add(context, managerId, request, "DonationRequestCreated", "Có đơn quyên góp mới",
-                $"Donor {request.ContactName} vừa tạo đơn {request.RequestCode}, yêu cầu tiếp nhận ngày {FormatDate(request.PickupDate)} lúc {FormatTime(DateTime.UtcNow)}.",
+                $"Donor {request.ContactName} vừa tạo đơn {request.RequestCode}, yêu cầu tiếp nhận lúc {FormatAppointment(request.PickupDate)}.",
                 $"/manager/dispatch?requestId={request.Id}");
     }
 
@@ -51,11 +51,14 @@ public static class NotificationWriter
     private static string FormatDate(DateTime? date) =>
         date.HasValue ? date.Value.ToString("dd/MM/yyyy") : "chưa xác định";
 
+    private static string FormatAppointment(DateTime? date) =>
+        date.HasValue ? date.Value.ToString("HH:mm dd/MM/yyyy") : "chưa xác định";
+
     private static void Add(AppDbContext context, Guid userId, DonationRequest request, string type,
         string title, string message, string targetUrl, Guid? actorId = null) => context.Notifications.Add(new Notification
         {
             Id = Guid.NewGuid(), UserId = userId, DonationRequestId = request.Id, Type = type,
             Title = title, Message = message, TargetUrl = targetUrl, IsRead = false,
-            CreateAt = DateTime.UtcNow, CreatedBy = actorId, IsActive = true
+            CreateAt = VietnamTime.Now, CreatedBy = actorId, IsActive = true
         });
 }

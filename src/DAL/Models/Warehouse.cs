@@ -11,6 +11,8 @@ namespace DAL.Models
         public string? Description { get; set; }
         public decimal TotalCapacityKg { get; set; }
         public decimal CurrentWeight { get; set; }
+        public double? Latitude { get; set; }
+        public double? Longitude { get; set; }
 
         // Navigation
         public virtual ICollection<User> Users { get; set; }

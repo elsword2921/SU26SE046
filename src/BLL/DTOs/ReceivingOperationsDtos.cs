@@ -42,6 +42,9 @@ public record WarehouseDropOffItemDto(Guid Id, Guid WarehouseId, string Code, st
     string Status, List<string>? ImageUrls);
 public record WarehouseDropOffBoardDto(List<WarehouseDutyContextDto> DutyContexts,
     List<WarehouseDropOffItemDto> Requests);
+public record ReceivingStagingGroupDto(Guid Id, string GroupName, string AreaName,
+    decimal CapacityKg, decimal CurrentKg, decimal AvailableKg);
+public record ReceiveIntakeBatchAtWarehouseDto(Guid AreaGroupId);
 
 public class ReceivingBatchDto
 {
@@ -57,6 +60,12 @@ public class ReceivingBatchDto
     public string Status { get; set; } = string.Empty;
     public string TeamName { get; set; } = string.Empty;
     public string WarehouseAddress { get; set; } = string.Empty;
+    public decimal TotalWeight { get; set; }
+    public DateTime? WarehouseReceivedAt { get; set; }
+    public string? WarehouseReceivedBy { get; set; }
+    public string? CurrentAreaName { get; set; }
+    public string? CurrentGroupName { get; set; }
+    public List<ReceivingStagingGroupDto> ReceivingGroups { get; set; } = [];
     public List<ReceivingTeamMemberDto> TeamMembers { get; set; } = [];
     public List<ReceivingRequestDto> Requests { get; set; } = [];
 }
@@ -84,7 +93,8 @@ public record DispatchRequestDto(Guid Id, string Code, string ContactName, strin
     string DeliveryMethod, string Address, DateTime? ScheduledDate, Guid WarehouseId, string WarehouseName,
     DateTime? CreatedAt);
 public record DispatchTeamDto(Guid Id, string TeamName, string TeamType, Guid ShiftId, string ShiftName,
-    DateTime ShiftDate, string ShiftTime, Guid WarehouseId, List<ReceivingTeamMemberDto> Members);
+    DateTime ShiftDate, string ShiftTime, TimeSpan StartTime, TimeSpan EndTime,
+    Guid WarehouseId, List<ReceivingTeamMemberDto> Members);
 public record ReceivingDispatchBoardDto(List<DispatchRequestDto> Requests, List<DispatchTeamDto> Teams);
 public record ManagerWarehouseOptionDto(Guid Id, string Name, string Address);
 public record ManagerStaffOptionDto(Guid Id, string FullName, string UserName, string PhoneNumber,

@@ -38,7 +38,14 @@ builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped(typeof(ICrudService<>), typeof(CrudService<>));
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IEmailVerificationSender, EmailVerificationSender>();
-builder.Services.AddScoped<IDonorRequestService, DonorRequestService>();
+builder.Services.AddHttpClient<DonorRequestService>(client =>
+{
+    client.BaseAddress = new Uri("https://nominatim.openstreetmap.org/");
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("ReThreads/1.0 (warehouse-routing)");
+    client.DefaultRequestHeaders.AcceptLanguage.ParseAdd("vi");
+});
+builder.Services.AddScoped<IDonorRequestService>(provider =>
+    provider.GetRequiredService<DonorRequestService>());
 builder.Services.AddScoped<IWarehouseService, WarehouseService>();
 builder.Services.AddScoped<IReceivingOperationsService, ReceivingOperationsService>();
 builder.Services.AddScoped<IClassificationOperationsService, ClassificationOperationsService>();

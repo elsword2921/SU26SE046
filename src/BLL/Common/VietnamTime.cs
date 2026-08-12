@@ -2,7 +2,7 @@ namespace BLL.Common;
 
 /// <summary>
 /// Centralizes the application's time-zone convention.
-/// Instants are persisted as UTC; calendar-day business rules use Vietnam time.
+/// System timestamps are persisted as Vietnam local time (UTC+7).
 /// </summary>
 public static class VietnamTime
 {
@@ -21,8 +21,8 @@ public static class VietnamTime
         return TimeZoneInfo.ConvertTimeFromUtc(normalizedUtc, Zone);
     }
 
-    public static bool IsSameLocalDate(DateTime utc, DateTime localDate) =>
-        FromUtc(utc).Date == localDate.Date;
+    public static bool IsSameLocalDate(DateTime storedTime, DateTime localDate) =>
+        (storedTime.Kind == DateTimeKind.Utc ? FromUtc(storedTime) : storedTime).Date == localDate.Date;
 
     private static TimeZoneInfo ResolveZone()
     {

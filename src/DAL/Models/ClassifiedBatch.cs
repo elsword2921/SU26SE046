@@ -28,6 +28,11 @@ public class ClassifiedBatch : BaseEntity
     public decimal TotalWeight { get; set; }
     public int TotalItem { get; set; }
     public string Status { get; set; } = string.Empty;
+    public string? ClassificationAreaName { get; set; }
+    public DateTime? PlacedInClassificationAreaAt { get; set; }
+    public Guid? PlacedInClassificationAreaByStaffId { get; set; }
+    public DateTime? RemovedFromClassificationAreaAt { get; set; }
+    public Guid? RemovedFromClassificationAreaByStaffId { get; set; }
     public DateTime? SentToWarehouseAt { get; set; }
     public Guid? SentToWarehouseByStaffId { get; set; }
     public DateTime? WarehouseReceivedAt { get; set; }
@@ -41,6 +46,8 @@ public class ClassifiedBatch : BaseEntity
     public virtual AreaGroup? Group { get; set; }
     public virtual WarehouseArea? Area { get; set; }
     public virtual User? SentToWarehouseByStaff { get; set; }
+    public virtual User? PlacedInClassificationAreaByStaff { get; set; }
+    public virtual User? RemovedFromClassificationAreaByStaff { get; set; }
     public virtual User? WarehouseReceivedByStaff { get; set; }
     public virtual User? StoredByStaff { get; set; }
     public virtual ICollection<ClassifiedItem> Items { get; set; } = new List<ClassifiedItem>();

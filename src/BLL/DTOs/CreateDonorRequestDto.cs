@@ -10,6 +10,8 @@
 
         public string DeliveryMethod { get; set; } = "StaffPickup";
 
+        public Guid? WarehouseId { get; set; }
+
         public string Description { get; set; }
 
         public List<string>? ImageUrls { get; set; }
@@ -18,6 +20,8 @@
 
         public string? PickupAddress { get; set; }
 
-        public Guid WarehouseId { get; set; }
+        public double? PickupLatitude { get; set; }
+
+        public double? PickupLongitude { get; set; }
     }
 }
