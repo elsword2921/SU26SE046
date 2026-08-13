@@ -680,7 +680,8 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
         var shift = await context.Shifts.FirstOrDefaultAsync(x => x.Id == dto.ShiftId && x.IsActive != false)
             ?? throw new InvalidOperationException("Shift not found.");
         var team = await context.OperationalTeams.Include(x => x.Members)
-            .FirstOrDefaultAsync(x => x.Id == dto.TeamId && x.ShiftId == shift.Id && x.IsActive != false)
+            .FirstOrDefaultAsync(x => x.Id == dto.TeamId && x.ShiftId == shift.Id && x.IsActive != false
+                && (x.TeamType == "Receiving" || x.TeamType == "ReceivingPickup"))
             ?? throw new InvalidOperationException("Receiving team does not belong to this shift.");
         if (team.Members.Count(x => x.IsActive != false) != 2)
             throw new InvalidOperationException("Receiving team must contain exactly two members.");
@@ -767,28 +768,35 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
             .Where(x => !IsShiftEnded(x))
             .ToList();
         var allTeams = dayShifts.SelectMany(x => x.Teams)
-            .Where(x => x.Status == "Scheduled"
+            .Where(x => (x.TeamType == "Receiving" || x.TeamType == "ReceivingPickup"
+                    || x.TeamType == "ReceivingWarehouse")
+                && x.Status == "Scheduled"
                 && x.Members.Count(m => m.IsActive != false) == 2)
             .OrderBy(x => x.Shift.StartTime)
             .ThenBy(x => x.TeamName)
             .ThenBy(x => x.Id)
             .ToList();
-        var pickupTeams = allTeams.Where(x => x.TeamType != "ReceivingWarehouse").ToList();
+        var pickupTeams = allTeams.Where(x => x.TeamType == "Receiving"
+            || x.TeamType == "ReceivingPickup").ToList();
         var warehouseTeams = allTeams.Where(x => x.TeamType == "ReceivingWarehouse").ToList();
         if (allTeams.Count == 0)
             throw new InvalidOperationException(
                 "Create at least one complete receiving team for this warehouse and working day before auto-assigning requests.");
 
         var dayShiftIds = dayShifts.Select(x => x.Id).ToList();
+        // Load every pending assignment for the day, including legacy invalid rows
+        // that may point at a classification team. AssignBalanced will move those
+        // rows onto an eligible receiving team instead of creating duplicates.
         var pendingAssignments = await context.PickupAssignments
             .Include(x => x.DonorRequest)
             .Include(x => x.Team)
             .Where(x => dayShiftIds.Contains(x.ShiftId)
-                && x.IsActive != false && x.Status == "Pending"
-                && x.Team.Status == "Scheduled")
+                && x.IsActive != false && x.Status == "Pending")
             .ToListAsync();
         var assignedElsewhere = context.PickupAssignments
-            .Where(x => x.IsActive != false && !dayShiftIds.Contains(x.ShiftId))
+            .Where(x => x.IsActive != false && !dayShiftIds.Contains(x.ShiftId)
+                && (x.Team.TeamType == "Receiving" || x.Team.TeamType == "ReceivingPickup"
+                    || x.Team.TeamType == "ReceivingWarehouse"))
             .Select(x => x.DonorRequestId);
         var unassigned = await context.DonationRequests
             .Where(x => x.WarehouseId == selectedShift.WarehouseId && x.IsActive != false
@@ -922,7 +930,9 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
         var now = VietnamTime.Now;
         var today = now.Date;
         var currentTime = now.TimeOfDay;
-        var assignedIds = context.PickupAssignments.Where(x => x.IsActive != false)
+        var assignedIds = context.PickupAssignments.Where(x => x.IsActive != false
+                && (x.Team.TeamType == "Receiving" || x.Team.TeamType == "ReceivingPickup"
+                    || x.Team.TeamType == "ReceivingWarehouse"))
             .Select(x => x.DonorRequestId);
         var requests = await context.DonationRequests.AsNoTracking()
             .Include(x => x.Warehouse)
@@ -990,7 +1000,9 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
     {
         var shiftQuery = context.Shifts.AsNoTracking()
             .Include(x => x.Warehouse)
-            .Include(x => x.Teams.Where(t => t.IsActive != false))
+            .Include(x => x.Teams.Where(t => t.IsActive != false
+                && (t.TeamType == "Receiving" || t.TeamType == "ReceivingPickup"
+                    || t.TeamType == "ReceivingWarehouse")))
                 .ThenInclude(x => x.Members.Where(m => m.IsActive != false)).ThenInclude(x => x.Staff)
             .Include(x => x.IntakeBatches.Where(b => b.IsActive != false))
                 .ThenInclude(x => x.PickupAssignments.Where(a => a.IsActive != false))
