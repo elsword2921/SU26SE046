@@ -10,6 +10,7 @@ namespace DAL.Models
         public Guid? ClassificationTeamId { get; set; }
         public Guid? CurrentAreaId { get; set; }
         public Guid? CurrentAreaGroupId { get; set; }
+        public Guid? CurrentStorageLocationId { get; set; }
         public List<string>? BatchImages { get; set; }
         public string BatchCode { get; set; } = string.Empty;
         public string RouteName { get; set; } = string.Empty;
@@ -45,6 +46,7 @@ namespace DAL.Models
         public virtual OperationalTeam? ClassificationTeam { get; set; }
         public virtual WarehouseArea? CurrentArea { get; set; }
         public virtual AreaGroup? CurrentAreaGroup { get; set; }
+        public virtual StorageLocation? CurrentStorageLocation { get; set; }
         public virtual User? WarehouseReceivedByStaff { get; set; }
         public virtual User? ClassificationAssignedByManager { get; set; }
         public virtual User? ClassificationReceivedByStaff { get; set; }

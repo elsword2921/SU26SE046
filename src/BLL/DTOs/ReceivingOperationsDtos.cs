@@ -42,9 +42,13 @@ public record WarehouseDropOffItemDto(Guid Id, Guid WarehouseId, string Code, st
     string Status, List<string>? ImageUrls);
 public record WarehouseDropOffBoardDto(List<WarehouseDutyContextDto> DutyContexts,
     List<WarehouseDropOffItemDto> Requests);
+public record ReceivingStagingLocationDto(Guid Id, string LocationCode, string AisleCode,
+    string RackCode, string ShelfCode, string BinCode, decimal CapacityKg,
+    decimal CurrentKg, decimal AvailableKg, string Status);
 public record ReceivingStagingGroupDto(Guid Id, string GroupName, string AreaName,
-    decimal CapacityKg, decimal CurrentKg, decimal AvailableKg);
-public record ReceiveIntakeBatchAtWarehouseDto(Guid AreaGroupId);
+    decimal CapacityKg, decimal CurrentKg, decimal AvailableKg,
+    List<ReceivingStagingLocationDto> Locations);
+public record ReceiveIntakeBatchAtWarehouseDto(Guid AreaGroupId, Guid StorageLocationId);
 
 public class ReceivingBatchDto
 {
@@ -59,12 +63,14 @@ public class ReceivingBatchDto
     public TimeSpan EndTime { get; set; }
     public string Status { get; set; } = string.Empty;
     public string TeamName { get; set; } = string.Empty;
+    public string WarehouseName { get; set; } = string.Empty;
     public string WarehouseAddress { get; set; } = string.Empty;
     public decimal TotalWeight { get; set; }
     public DateTime? WarehouseReceivedAt { get; set; }
     public string? WarehouseReceivedBy { get; set; }
     public string? CurrentAreaName { get; set; }
     public string? CurrentGroupName { get; set; }
+    public string? CurrentLocationCode { get; set; }
     public List<ReceivingStagingGroupDto> ReceivingGroups { get; set; } = [];
     public List<ReceivingTeamMemberDto> TeamMembers { get; set; } = [];
     public List<ReceivingRequestDto> Requests { get; set; } = [];

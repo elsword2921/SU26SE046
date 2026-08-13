@@ -283,6 +283,12 @@ namespace DAL
                 .HasForeignKey(x => x.CurrentAreaGroupId)
                 .OnDelete(DeleteBehavior.SetNull);
 
+            modelBuilder.Entity<IntakeBatch>()
+                .HasOne(x => x.CurrentStorageLocation)
+                .WithMany()
+                .HasForeignKey(x => x.CurrentStorageLocationId)
+                .OnDelete(DeleteBehavior.SetNull);
+
             modelBuilder.Entity<IntakeBatch>().HasOne(x => x.WarehouseReceivedByStaff).WithMany()
                 .HasForeignKey(x => x.WarehouseReceivedByStaffId).OnDelete(DeleteBehavior.Restrict);
             modelBuilder.Entity<IntakeBatch>().HasOne(x => x.ClassificationAssignedByManager).WithMany()

@@ -11,4 +11,5 @@ public class AreaGroup : BaseEntity
     public decimal CurrentKg { get; set; }
     public virtual WarehouseArea Area { get; set; } = null!;
     public virtual ICollection<Inventory> Inventories { get; set; } = new List<Inventory>();
+    public virtual ICollection<StorageLocation> StorageLocations { get; set; } = new List<StorageLocation>();
 }

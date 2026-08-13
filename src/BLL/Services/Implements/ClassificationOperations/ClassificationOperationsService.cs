@@ -611,6 +611,17 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
 
         if (batch.CurrentAreaGroupId.HasValue)
         {
+            if (batch.CurrentStorageLocationId.HasValue)
+            {
+                var sourceLocation = await context.StorageLocations
+                    .FirstOrDefaultAsync(x => x.Id == batch.CurrentStorageLocationId.Value);
+                if (sourceLocation is not null)
+                {
+                    sourceLocation.CurrentWeightKg = Math.Max(0,
+                        sourceLocation.CurrentWeightKg - batch.TotalWeight);
+                    sourceLocation.UpdateAt = VietnamTime.Now;
+                }
+            }
             var source = await context.AreaGroups.FirstOrDefaultAsync(x => x.Id == batch.CurrentAreaGroupId.Value);
             if (source is not null)
             {
@@ -629,6 +640,7 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
         destinationArea.CurrentKg += batch.TotalWeight;
         destinationArea.UpdateAt = VietnamTime.Now;
         batch.CurrentAreaGroupId = destination.Id;
+        batch.CurrentStorageLocationId = null;
     }
 
     private async Task<IntakeBatch> RequireBatch(Guid id) => await context.IntakeBatches

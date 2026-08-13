@@ -1,7 +1,8 @@
 namespace BLL.DTOs;
 
 public record WarehouseDashboardDto(int PendingReceipt, int AwaitingPutaway, int StoredBatches,
-    int AvailableQuantity, int InventorySkuCount, decimal AvailableWeightKg, decimal CapacityUsedPercent);
+    int AvailableQuantity, int InventorySkuCount, decimal AvailableWeightKg, decimal CapacityUsedPercent,
+    decimal CurrentWeightKg, decimal CapacityKg);
 
 public record WarehouseLayoutDto(Guid WarehouseId, string WarehouseName, string Address,
     decimal CapacityKg, decimal CurrentWeightKg, IReadOnlyList<WarehouseAreaLayoutDto> Areas);
@@ -12,7 +13,8 @@ public record WarehouseAreaLayoutDto(Guid Id, string AreaName, string? Descripti
     IReadOnlyList<WarehouseStagingBatchDto> IntakeBatches);
 public record WarehouseStagingBatchDto(Guid Id, string BatchCode, string Status,
     decimal TotalWeight, DateTime IntakeDate, int DonationRequests, string? TeamName,
-    string? GroupName, DateTime? WarehouseReceivedAt, string? WarehouseReceivedBy);
+    Guid? StorageLocationId, string? LocationCode, string? GroupName,
+    DateTime? WarehouseReceivedAt, string? WarehouseReceivedBy);
 public record WarehouseGroupLayoutDto(Guid Id, string GroupName, string? Description,
     decimal CapacityKg, decimal CurrentWeightKg);
 public record WarehouseLocationLayoutDto(Guid Id, Guid? AreaGroupId, string LocationCode, string AisleCode,
@@ -68,6 +70,9 @@ public record SaveWarehouseAreaDto(Guid WarehouseId, string AreaName, string? De
     decimal CapacityKg);
 public record CreateWarehouseDto(string WarehouseName, string Address, string? PhoneNumber,
     string? Email, string? Description, decimal TotalCapacityKg);
+public record WarehouseDetailsDto(Guid Id, string WarehouseName, string Address, string? PhoneNumber,
+    string? Email, string? Description, decimal TotalCapacityKg, decimal CurrentWeightKg,
+    decimal AllocatedAreaCapacityKg);
 public record SaveWarehouseGroupDto(Guid AreaId, string GroupName, string? Description,
     decimal CapacityKg);
 public record SaveStorageLocationDto(Guid AreaGroupId, string LocationCode, string AisleCode,

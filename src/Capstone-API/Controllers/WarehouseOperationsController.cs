@@ -32,6 +32,21 @@ public class WarehouseOperationsController(IWarehouseOperationsService service) 
     public async Task<IActionResult> CreateWarehouse(CreateWarehouseDto dto) =>
         Ok(new { id = await service.CreateWarehouseAsync(CurrentUserId, dto) });
 
+    [HttpGet("warehouses/{warehouseId:guid}")]
+    [Authorize(Roles = "Manager")]
+    public async Task<IActionResult> Warehouse(Guid warehouseId) =>
+        Ok(await service.GetWarehouseAsync(CurrentUserId, warehouseId));
+
+    [HttpPut("warehouses/{warehouseId:guid}")]
+    [Authorize(Roles = "Manager")]
+    public async Task<IActionResult> UpdateWarehouse(Guid warehouseId, CreateWarehouseDto dto)
+    { await service.UpdateWarehouseAsync(CurrentUserId, warehouseId, dto); return NoContent(); }
+
+    [HttpDelete("warehouses/{warehouseId:guid}")]
+    [Authorize(Roles = "Manager")]
+    public async Task<IActionResult> DeleteWarehouse(Guid warehouseId)
+    { await service.DeleteWarehouseAsync(CurrentUserId, warehouseId); return NoContent(); }
+
     [HttpPost("areas")]
     [Authorize(Roles = "Manager")]
     public async Task<IActionResult> CreateArea(SaveWarehouseAreaDto dto) =>
