@@ -39,6 +39,7 @@ namespace DAL
         public DbSet<TransferRequest> TransferRequests => Set<TransferRequest>();
         public DbSet<TransferItem> TransferItems => Set<TransferItem>();
         public DbSet<Notification> Notifications => Set<Notification>();
+        public DbSet<DonationChatMessage> DonationChatMessages => Set<DonationChatMessage>();
 
         public AppDbContext(DbContextOptions<AppDbContext> options)
             : base(options)
@@ -213,6 +214,16 @@ namespace DAL
             modelBuilder.Entity<Notification>()
                 .HasOne(x => x.DonationRequest).WithMany(x => x.Notifications)
                 .HasForeignKey(x => x.DonationRequestId).OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<DonationChatMessage>().Property(x => x.Message).HasMaxLength(2000);
+            modelBuilder.Entity<DonationChatMessage>()
+                .HasIndex(x => new { x.DonationRequestId, x.SentAt });
+            modelBuilder.Entity<DonationChatMessage>()
+                .HasOne(x => x.DonationRequest).WithMany()
+                .HasForeignKey(x => x.DonationRequestId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<DonationChatMessage>()
+                .HasOne(x => x.Sender).WithMany()
+                .HasForeignKey(x => x.SenderId).OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<DistributionItem>()
                 .HasOne(x => x.Inventory).WithMany()

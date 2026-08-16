@@ -234,6 +234,7 @@ namespace BLL.Services.Implements.DonorRequestService
             return requests
                 .Include(x => x.Donor)
                 .Include(x => x.Warehouse)
+                .Include(x => x.PickupAssignments).ThenInclude(x => x.Team).ThenInclude(x => x.Members).ThenInclude(x => x.Staff)
                 .OrderByDescending(x => x.CreateAt)
                 .Select(x => new DonorRequestSearchResultDto
                 {
@@ -256,6 +257,14 @@ namespace BLL.Services.Implements.DonorRequestService
                             ? "Chờ người quyên góp mang hàng đến kho"
                             : GetStatusText(x.Status),
                     CreatedAt = x.CreateAt,
+                    ReceivingTeamName = x.PickupAssignments.Where(a => a.IsActive != false)
+                        .OrderByDescending(a => a.CreateAt).Select(a => a.Team.TeamName).FirstOrDefault(),
+                    EstimatedPickupAt = x.PickupAssignments.Any(a => a.IsActive != false) ? x.PickupDate : null,
+                    ReceivingStaff = x.PickupAssignments.Where(a => a.IsActive != false)
+                        .OrderByDescending(a => a.CreateAt).Take(1)
+                        .SelectMany(a => a.Team.Members.Where(m => m.IsActive != false))
+                        .Select(m => new AssignedReceivingStaffDto(m.StaffId, m.Staff.FullName, m.Staff.PhoneNumber))
+                        .ToList(),
                 });
         }
         private static bool CanDonorModify(DonationRequestStatus status)

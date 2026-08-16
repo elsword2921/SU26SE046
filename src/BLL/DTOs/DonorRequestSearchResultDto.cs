@@ -33,5 +33,13 @@ namespace BLL.DTOs
         public string StatusText { get; set; } = string.Empty;
 
         public DateTime? CreatedAt { get; set; }
+
+        public string? ReceivingTeamName { get; set; }
+
+        public DateTime? EstimatedPickupAt { get; set; }
+
+        public List<AssignedReceivingStaffDto> ReceivingStaff { get; set; } = [];
     }
+
+    public record AssignedReceivingStaffDto(Guid Id, string FullName, string PhoneNumber);
 }
