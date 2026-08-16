@@ -6,7 +6,7 @@ using System.Security.Claims;
 
 namespace Capstone_API.Hubs;
 
-[Authorize(Roles = "Donor,ReceivingStaff")]
+[Authorize]
 public class DonationChatHub(AppDbContext context) : Hub
 {
     public static string GroupName(Guid requestId) => $"donation-chat:{requestId:N}";

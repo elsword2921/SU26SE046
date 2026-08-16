@@ -40,6 +40,7 @@ namespace DAL
         public DbSet<TransferItem> TransferItems => Set<TransferItem>();
         public DbSet<Notification> Notifications => Set<Notification>();
         public DbSet<DonationChatMessage> DonationChatMessages => Set<DonationChatMessage>();
+        public DbSet<DirectChatMessage> DirectChatMessages => Set<DirectChatMessage>();
 
         public AppDbContext(DbContextOptions<AppDbContext> options)
             : base(options)
@@ -224,6 +225,13 @@ namespace DAL
             modelBuilder.Entity<DonationChatMessage>()
                 .HasOne(x => x.Sender).WithMany()
                 .HasForeignKey(x => x.SenderId).OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<DirectChatMessage>().Property(x => x.Message).HasMaxLength(2000);
+            modelBuilder.Entity<DirectChatMessage>().HasIndex(x => new { x.SenderId, x.RecipientId, x.SentAt });
+            modelBuilder.Entity<DirectChatMessage>().HasOne(x => x.Sender).WithMany()
+                .HasForeignKey(x => x.SenderId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<DirectChatMessage>().HasOne(x => x.Recipient).WithMany()
+                .HasForeignKey(x => x.RecipientId).OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<DistributionItem>()
                 .HasOne(x => x.Inventory).WithMany()
