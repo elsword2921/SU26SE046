@@ -327,11 +327,14 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
         var classifiedBatchIds = intakes.SelectMany(x => x.ClassifiedItems)
             .Where(x => x.ClassifiedBatchId.HasValue)
             .Select(x => x.ClassifiedBatchId!.Value).Distinct().ToList();
-        var inventoryByBatch = await context.Inventories.AsNoTracking()
+        var inventoryRows = await context.Inventories.AsNoTracking()
             .Include(x => x.StorageLocation)
             .Where(x => x.WarehouseId == warehouseId && x.IsActive != false
                 && x.ClassifiedBatchId.HasValue && classifiedBatchIds.Contains(x.ClassifiedBatchId.Value))
-            .ToDictionaryAsync(x => x.ClassifiedBatchId!.Value);
+            .ToListAsync();
+        var inventoriesByBatch = inventoryRows
+            .GroupBy(x => x.ClassifiedBatchId!.Value)
+            .ToDictionary(x => x.Key, x => x.ToList());
 
         return intakes.Select(intake => new WarehouseIntakeTraceDto(
             intake.Id, intake.BatchCode, intake.IntakeDate, intake.Status, intake.RouteName,
@@ -342,11 +345,19 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
                 .Select(group =>
                 {
                     var classified = group.First().ClassifiedBatch!;
-                    inventoryByBatch.TryGetValue(classified.Id, out var inventory);
+                    inventoriesByBatch.TryGetValue(classified.Id, out var inventories);
+                    var inventorySkus = inventories is null ? null : string.Join(", ", inventories
+                        .Select(x => x.Sku).Where(x => !string.IsNullOrWhiteSpace(x))
+                        .Distinct().OrderBy(x => x));
+                    var locationCodes = inventories is null ? null : string.Join(", ", inventories
+                        .Select(x => x.StorageLocation?.LocationCode)
+                        .Where(x => !string.IsNullOrWhiteSpace(x))
+                        .Distinct().OrderBy(x => x));
                     return new WarehouseClassifiedBatchTraceDto(classified.Id, classified.BatchCode,
                         classified.Status, classified.ClothingType, Grade(classified.ConditionRating),
                         classified.ProcessingDirection, classified.TotalItem, classified.TotalWeight,
-                        inventory?.Sku, inventory?.StorageLocation?.LocationCode,
+                        string.IsNullOrEmpty(inventorySkus) ? null : inventorySkus,
+                        string.IsNullOrEmpty(locationCodes) ? null : locationCodes,
                         classified.DonationRequestSources.Where(x => x.IsActive != false)
                             .Select(x => x.DonationRequest.RequestCode).Distinct().OrderBy(x => x).ToList());
                 }).OrderBy(x => x.BatchCode).ToList())).ToList();

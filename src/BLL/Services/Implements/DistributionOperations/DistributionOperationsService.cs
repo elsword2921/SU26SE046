@@ -171,15 +171,41 @@ public class DistributionOperationsService(AppDbContext context, HttpClient ghnC
         if(pickupDistrictId<=0||string.IsNullOrWhiteSpace(pickupWardCode))
             throw new InvalidOperationException("GHN pickup district and ward are not configured on the server.");
         var weight=(int)Math.Ceiling(request.Items.Sum(x=>x.IssuedWeight)*1000);
-        var payload=new {payment_type_id=dto.PaymentTypeId,service_type_id=dto.ServiceTypeId<=0?2:dto.ServiceTypeId,
-            required_note=dto.RequiredNote??"KHONGCHOXEMHANG",
-            from_name=configuration["Ghn:PickupName"]??request.Warehouse.WarehouseName,
-            from_phone=configuration["Ghn:PickupPhone"]??request.Warehouse.PhoneNumber??"0900000000",
-            from_address=configuration["Ghn:PickupAddress"]??request.Warehouse.Address,
-            from_district_id=pickupDistrictId,from_ward_code=pickupWardCode,
-            to_name=request.RecipientName,to_phone=request.RecipientPhone,to_address=request.ToAddress,to_district_id=dto.ToDistrictId,to_ward_code=dto.ToWardCode,
-            weight=Math.Max(weight,1),length=40,width=40,height=40,client_order_code=request.IssueSlipCode,
-            items=request.Items.Select(x=>new{name=x.Inventory.ClothingType,code=x.Inventory.Sku,quantity=x.IssuedQuantity,price=0}).ToList()};
+        var serviceTypeId=weight>50000?5:(dto.ServiceTypeId<=0?2:dto.ServiceTypeId);
+        var items=new List<Dictionary<string,object>>();
+        if(serviceTypeId==5)
+        {
+            foreach(var item in request.Items)
+            {
+                var remaining=Math.Max(1,(int)Math.Ceiling(item.IssuedWeight*1000));
+                var packageNumber=1;
+                while(remaining>0)
+                {
+                    var packageWeight=Math.Min(remaining,30000);
+                    items.Add(new Dictionary<string,object>{
+                        ["name"]=$"{item.Inventory.ClothingType} - kiện {packageNumber}",
+                        ["code"]=$"{item.Inventory.Sku}-P{packageNumber}",["quantity"]=1,["price"]=0,
+                        ["weight"]=packageWeight,["length"]=40,["width"]=40,["height"]=30});
+                    remaining-=packageWeight;packageNumber++;
+                }
+            }
+        }
+        else
+            items.AddRange(request.Items.Select(x=>new Dictionary<string,object>{
+                ["name"]=x.Inventory.ClothingType,["code"]=x.Inventory.Sku,
+                ["quantity"]=x.IssuedQuantity,["price"]=0}));
+        var payload=new Dictionary<string,object?>{
+            ["payment_type_id"]=dto.PaymentTypeId,["service_type_id"]=serviceTypeId,
+            ["required_note"]=dto.RequiredNote??"KHONGCHOXEMHANG",
+            ["from_name"]=configuration["Ghn:PickupName"]??request.Warehouse.WarehouseName,
+            ["from_phone"]=configuration["Ghn:PickupPhone"]??request.Warehouse.PhoneNumber??"0900000000",
+            ["from_address"]=configuration["Ghn:PickupAddress"]??request.Warehouse.Address,
+            ["from_district_id"]=pickupDistrictId,["from_ward_code"]=pickupWardCode,
+            ["to_name"]=request.RecipientName,["to_phone"]=request.RecipientPhone,
+            ["to_address"]=request.ToAddress,["to_district_id"]=dto.ToDistrictId,
+            ["to_ward_code"]=dto.ToWardCode,["client_order_code"]=request.IssueSlipCode,["items"]=items,
+            ["weight"]=Math.Max(weight,1),["length"]=40,["width"]=40,
+            ["height"]=serviceTypeId==5?Math.Min(200,Math.Max(30,items.Count*30)):40};
         var response=await client.PostAsJsonAsync("v2/shipping-order/create",payload);
         var json=await response.Content.ReadAsStringAsync();
         if(!response.IsSuccessStatusCode)throw new InvalidOperationException($"GHN rejected shipment: {json}");

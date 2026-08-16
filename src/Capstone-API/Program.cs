@@ -27,6 +27,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.Security.Authentication;
 using Microsoft.OpenApi;
 using System.Text;
+using Capstone_API.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -56,6 +57,7 @@ builder.Services.AddScoped<IVoucherService, VoucherService>();
 builder.Services.AddHttpClient<DistributionOperationsService>(client =>
     client.BaseAddress = new Uri("https://dev-online-gateway.ghn.vn/shiip/public-api/"));
 builder.Services.AddControllers();
+builder.Services.AddSignalR();
 builder.Services.AddEndpointsApiExplorer();
 
 builder.Services.AddSwaggerGen(options =>
@@ -98,6 +100,16 @@ builder.Services
                     Encoding.UTF8.GetBytes(
                         builder.Configuration["Jwt:Key"]!))
         };
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            var token = context.Request.Query["access_token"];
+            if (!string.IsNullOrEmpty(token) && context.HttpContext.Request.Path.StartsWithSegments("/hubs"))
+                context.Token = token;
+            return Task.CompletedTask;
+        }
+    };
 });
 
 builder.Services.AddCors(options =>
@@ -160,5 +172,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<DonationChatHub>("/hubs/donation-chat");
 
 app.Run();
