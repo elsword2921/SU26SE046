@@ -4,13 +4,29 @@ artifacts/
 [Bb]in/
 [Oo]bj/
 
+# Local tooling and temporary files
+.agents/
+.config/
+.tmp/
+.tools/
+tools/
+*.tmp
+*.temp
+*.log
+
+# Generated reports, diagrams, and database documentation
+output/
+docs/generated-database-schema/
+
 # OS / editor
 .vs/
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
-backend-restart-error.log
-backend-restart.log
-backend-local-error.log
-backend-local.log
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+!.env.sample
