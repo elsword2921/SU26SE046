@@ -37,9 +37,19 @@ namespace Capstone_API.Controllers
         [Authorize(Roles = "Donor")]
         public async Task<IActionResult> PickupWindows(
             [FromQuery] DateTime date,
-            [FromQuery] double latitude,
-            [FromQuery] double longitude) =>
-            Ok(await _service.GetPickupAvailabilityAsync(date, latitude, longitude));
+            [FromQuery] double? latitude,
+            [FromQuery] double? longitude,
+            [FromQuery] Guid? warehouseId) =>
+            Ok(await _service.GetPickupAvailabilityAsync(date, latitude, longitude, warehouseId));
+
+        [HttpGet("pickup-dates")]
+        [Authorize(Roles = "Donor")]
+        public async Task<IActionResult> PickupDates(
+            [FromQuery] DateTime month,
+            [FromQuery] double? latitude,
+            [FromQuery] double? longitude,
+            [FromQuery] Guid? warehouseId) =>
+            Ok(await _service.GetPickupDatesAsync(month, latitude, longitude, warehouseId));
 
 
 

@@ -53,10 +53,6 @@ namespace BLL.Services.Implements.DonorRequestService
                 throw new InvalidOperationException("Vui lòng chọn kho tiếp nhận.");
             if (dto.PickupDate.HasValue && dto.PickupDate.Value <= VietnamTime.Now)
                 throw new InvalidOperationException("Khung giờ tiếp nhận phải nằm trong tương lai.");
-            if (dto.PickupDate.HasValue && IsWeekend(dto.PickupDate.Value))
-                throw new InvalidOperationException(
-                    "Hệ thống chỉ tiếp nhận quyên góp từ Thứ Hai đến Thứ Sáu.");
-
             var warehouse = deliveryMethod == "DonorDropOff"
                 ? await _context.Warehouses.FirstOrDefaultAsync(x =>
                     x.Id == dto.WarehouseId && x.IsActive != false)
@@ -67,7 +63,7 @@ namespace BLL.Services.Implements.DonorRequestService
                 throw new InvalidOperationException("Kho tiếp nhận không tồn tại hoặc đã ngừng hoạt động.");
             if (!dto.PickupDate.HasValue)
                 throw new InvalidOperationException("Ngày và khung giờ tiếp nhận là bắt buộc.");
-            ValidateBusinessHours(dto.PickupDate.Value);
+            await ValidatePickupWindowAsync(warehouse.Id, dto.PickupDate.Value);
 
             var requestId = Guid.NewGuid();
             var now = VietnamTime.Now;
@@ -142,11 +138,7 @@ namespace BLL.Services.Implements.DonorRequestService
 
             if (dto.PickupDate.Date < VietnamTime.Today)
                 throw new InvalidOperationException("Ngày tiếp nhận không được nằm trong quá khứ.");
-            if (IsWeekend(dto.PickupDate))
-                throw new InvalidOperationException(
-                    "Hệ thống chỉ tiếp nhận quyên góp từ Thứ Hai đến Thứ Sáu.");
-
-            ValidateBusinessHours(dto.PickupDate);
+            await ValidatePickupWindowAsync(warehouse.Id, dto.PickupDate);
             request.WarehouseId = warehouse.Id;
             request.PickupDate = DateTime.SpecifyKind(dto.PickupDate, DateTimeKind.Unspecified);
             request.Description = dto.Description;
@@ -275,15 +267,23 @@ namespace BLL.Services.Implements.DonorRequestService
 
         public async Task<DonorPickupAvailabilityDto> GetPickupAvailabilityAsync(
             DateTime date,
-            double latitude,
-            double longitude)
+            double? latitude,
+            double? longitude,
+            Guid? warehouseId)
         {
-            if (IsWeekend(date))
-                return new DonorPickupAvailabilityDto(Guid.Empty, []);
-            var warehouse = await ResolveNearestWarehouseAsync(latitude, longitude, date);
+            Warehouse? warehouse;
+            if (warehouseId.HasValue)
+                warehouse = await _context.Warehouses.AsNoTracking().FirstOrDefaultAsync(x =>
+                    x.Id == warehouseId.Value && x.IsActive != false);
+            else if (latitude.HasValue && longitude.HasValue)
+                warehouse = await ResolveNearestWarehouseAsync(latitude.Value, longitude.Value);
+            else
+                throw new InvalidOperationException("Vui lòng chọn địa chỉ hoặc kho tiếp nhận.");
+            if (warehouse is null)
+                throw new InvalidOperationException("Kho tiếp nhận không tồn tại hoặc đã ngừng hoạt động.");
             var shifts = await _context.Shifts.AsNoTracking()
                 .Where(x => x.IsActive != false
-                    && x.Status == "Scheduled"
+                    && (x.Status == "Scheduled" || x.Status == "InProgress")
                     && x.WarehouseId == warehouse.Id
                     && x.ShiftDate.Date == date.Date)
                 .OrderBy(x => x.StartTime)
@@ -302,12 +302,47 @@ namespace BLL.Services.Implements.DonorRequestService
             return new DonorPickupAvailabilityDto(warehouse.Id, windows);
         }
 
+        public async Task<List<DateTime>> GetPickupDatesAsync(
+            DateTime month,
+            double? latitude,
+            double? longitude,
+            Guid? warehouseId)
+        {
+            Warehouse? warehouse;
+            if (warehouseId.HasValue)
+                warehouse = await _context.Warehouses.AsNoTracking().FirstOrDefaultAsync(x =>
+                    x.Id == warehouseId.Value && x.IsActive != false);
+            else if (latitude.HasValue && longitude.HasValue)
+                warehouse = await ResolveNearestWarehouseAsync(latitude.Value, longitude.Value);
+            else
+                throw new InvalidOperationException("Vui lòng chọn địa chỉ hoặc kho tiếp nhận.");
+            if (warehouse is null)
+                throw new InvalidOperationException("Kho tiếp nhận không tồn tại hoặc đã ngừng hoạt động.");
+
+            var firstDay = new DateTime(month.Year, month.Month, 1);
+            var nextMonth = firstDay.AddMonths(1);
+            var now = VietnamTime.Now;
+            var shifts = await _context.Shifts.AsNoTracking()
+                .Where(x => x.IsActive != false
+                    && (x.Status == "Scheduled" || x.Status == "InProgress")
+                    && x.WarehouseId == warehouse.Id
+                    && x.ShiftDate >= firstDay && x.ShiftDate < nextMonth)
+                .Select(x => new { x.ShiftDate, x.EndTime })
+                .ToListAsync();
+            return shifts
+                .Where(x => x.ShiftDate.Date.Add(x.EndTime) > now)
+                .Select(x => x.ShiftDate.Date)
+                .Distinct()
+                .OrderBy(x => x)
+                .ToList();
+        }
+
         private async Task ValidatePickupWindowAsync(Guid warehouseId, DateTime pickupDateTime)
         {
             var pickupTime = pickupDateTime.TimeOfDay;
             var valid = await _context.Shifts.AsNoTracking().AnyAsync(x =>
                 x.IsActive != false
-                && x.Status == "Scheduled"
+                && (x.Status == "Scheduled" || x.Status == "InProgress")
                 && x.WarehouseId == warehouseId
                 && x.ShiftDate.Date == pickupDateTime.Date
                 && x.StartTime <= pickupTime
@@ -315,14 +350,6 @@ namespace BLL.Services.Implements.DonorRequestService
             if (!valid)
                 throw new InvalidOperationException(
                     "Khung giờ tiếp nhận không còn khả dụng tại kho gần nhất. Vui lòng chọn lại.");
-        }
-
-        private static void ValidateBusinessHours(DateTime pickupDateTime)
-        {
-            var pickupTime = pickupDateTime.TimeOfDay;
-            if (pickupTime < new TimeSpan(8, 0, 0) || pickupTime > new TimeSpan(17, 0, 0))
-                throw new InvalidOperationException(
-                    "Giờ tiếp nhận phải nằm trong khoảng từ 08:00 đến 17:00.");
         }
 
         private async Task<Warehouse> ResolveNearestWarehouseAsync(
@@ -341,7 +368,7 @@ namespace BLL.Services.Implements.DonorRequestService
                 var now = VietnamTime.Now;
                 var scheduledShifts = await _context.Shifts.AsNoTracking()
                     .Where(x => x.IsActive != false
-                        && x.Status == "Scheduled"
+                        && (x.Status == "Scheduled" || x.Status == "InProgress")
                         && x.ShiftDate.Date == serviceDate.Value.Date)
                     .Select(x => new { x.WarehouseId, x.ShiftDate, x.EndTime })
                     .ToListAsync();

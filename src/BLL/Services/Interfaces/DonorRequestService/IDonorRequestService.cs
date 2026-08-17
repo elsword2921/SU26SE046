@@ -16,7 +16,14 @@ namespace BLL.Services.Interfaces.DonorRequestService
 
         Task<DonorPickupAvailabilityDto> GetPickupAvailabilityAsync(
             DateTime date,
-            double latitude,
-            double longitude);
+            double? latitude,
+            double? longitude,
+            Guid? warehouseId);
+
+        Task<List<DateTime>> GetPickupDatesAsync(
+            DateTime month,
+            double? latitude,
+            double? longitude,
+            Guid? warehouseId);
     }
 }
