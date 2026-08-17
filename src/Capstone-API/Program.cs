@@ -28,6 +28,7 @@ using System.Security.Authentication;
 using Microsoft.OpenApi;
 using System.Text;
 using Capstone_API.Hubs;
+using Capstone_API.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -50,6 +51,11 @@ builder.Services.AddScoped<IDonorRequestService>(provider =>
 builder.Services.AddScoped<IWarehouseService, WarehouseService>();
 builder.Services.AddScoped<IReceivingOperationsService, ReceivingOperationsService>();
 builder.Services.AddScoped<IClassificationOperationsService, ClassificationOperationsService>();
+builder.Services.AddHttpClient<GeminiClassificationService>(client =>
+{
+    client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");
+    client.Timeout = TimeSpan.FromSeconds(90);
+});
 builder.Services.AddScoped<IWarehouseOperationsService, WarehouseOperationsService>();
 builder.Services.AddScoped<IManagerDashboardService, ManagerDashboardService>();
 builder.Services.AddScoped<IManagerAccountService, ManagerAccountService>();

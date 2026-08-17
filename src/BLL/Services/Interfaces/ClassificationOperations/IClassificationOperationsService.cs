@@ -7,6 +7,7 @@ public interface IClassificationOperationsService
     Task<IReadOnlyList<ClassificationBatchSummaryDto>> GetBatchesAsync(Guid staffId);
     Task<ClassificationBatchDetailDto?> GetBatchAsync(Guid staffId, Guid batchId);
     Task<ClassificationCatalogDto> GetCatalogAsync();
+    Task<ClassificationAreaLayoutDto> GetClassificationAreaLayoutAsync(Guid staffId, DateTime? date);
     Task StartBatchAsync(Guid staffId, Guid batchId);
     Task ConfirmReceiptAsync(Guid staffId, Guid batchId);
     Task CountBatchAsync(Guid staffId, Guid batchId, CountClassificationBatchDto dto);

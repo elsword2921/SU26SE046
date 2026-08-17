@@ -313,6 +313,46 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
             .ToListAsync();
     }
 
+    public async Task<ClassificationAreaLayoutDto> GetClassificationAreaLayoutAsync(Guid staffId, DateTime? date)
+    {
+        var staff = await context.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == staffId && x.IsActive != false)
+            ?? throw new InvalidOperationException("Classification staff not found.");
+        if (!staff.WarehouseId.HasValue)
+            throw new InvalidOperationException("Classification staff is not assigned to a warehouse.");
+        var warehouse = await context.Warehouses.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == staff.WarehouseId.Value && x.IsActive != false)
+            ?? throw new InvalidOperationException("Warehouse not found.");
+        var areas = await context.WarehouseAreas.AsNoTracking()
+            .Where(x => x.WarehouseId == warehouse.Id && x.AreaType == "Classified" && x.IsActive != false)
+            .Include(x => x.Groups.Where(g => g.IsActive != false))
+                .ThenInclude(g => g.StorageLocations.Where(l => l.IsActive != false))
+            .OrderBy(x => x.AreaName).ToListAsync();
+        var areaIds = areas.Select(x => x.Id).ToList();
+        var query = context.ClassifiedBatches.AsNoTracking()
+            .Where(x => x.WarehouseId == warehouse.Id && x.Status == "Open"
+                && x.PlacedInClassificationAreaAt.HasValue && x.IsActive != false);
+        if (date.HasValue) query = query.Where(x => x.ClassificationDate == date.Value.Date);
+        var batches = await query.Include(x => x.DonationRequestSources.Where(s => s.IsActive != false))
+            .ThenInclude(x => x.DonationRequest).OrderBy(x => x.BatchCode).ToListAsync();
+        GroupedClassifiedBatchDto Map(ClassifiedBatch x) => new(x.Id, x.BatchCode, x.ClassificationDate,
+            x.FabricType, x.GarmentGroup, x.ClothingType, x.Gender, x.TargetUser, x.Size,
+            Grade(x.ConditionRating), x.ProcessingDirection, x.TotalItem, x.Status, x.TotalWeight,
+            x.ClassificationAreaName, x.PlacedInClassificationAreaAt,
+            x.DonationRequestSources.Select(s => s.DonationRequest.RequestCode).Distinct().OrderBy(c => c).ToList());
+        return new ClassificationAreaLayoutDto(warehouse.Id, warehouse.WarehouseName,
+            areas.Select(area => new ClassificationAreaDto(area.Id, area.AreaName, area.Description,
+                area.CapacityKg, area.CurrentKg, area.Groups.OrderBy(g => g.GroupName).Select(group =>
+                    new ClassificationAreaGroupDto(group.Id, group.GroupName, group.Description,
+                        group.CapacityKg, group.CurrentKg,
+                        group.StorageLocations.OrderBy(l => l.LocationCode).Select(l =>
+                            new ClassificationLocationDto(l.Id, l.LocationCode, l.AisleCode,
+                                l.RackCode, l.ShelfCode, l.BinCode, l.CapacityKg,
+                                l.CurrentWeightKg, l.Status)).ToList(),
+                        batches.Where(b => b.GroupId == group.Id).Select(Map).ToList())).ToList())).ToList(),
+            batches.Where(x => !x.AreaId.HasValue || !areaIds.Contains(x.AreaId.Value)
+                || !x.GroupId.HasValue).Select(Map).ToList());
+    }
+
     public async Task<GroupedClassifiedBatchDetailDto?> GetGroupedBatchAsync(Guid groupedBatchId)
     {
         var group = await context.ClassifiedBatches.AsNoTracking()
@@ -444,6 +484,8 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
             .ToListAsync();
         foreach (var groupedBatch in groupedBatches)
         {
+            groupedBatch.AreaId = classifiedArea.Id;
+            groupedBatch.GroupId = batch.CurrentAreaGroupId;
             groupedBatch.ClassificationAreaName = areaName;
             groupedBatch.PlacedInClassificationAreaAt ??= now;
             groupedBatch.PlacedInClassificationAreaByStaffId ??= staffId;

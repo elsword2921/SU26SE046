@@ -3,13 +3,15 @@ using BLL.DTOs;
 using BLL.Services.Interfaces.ClassificationOperations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Capstone_API.Services;
 
 namespace Capstone_API.Controllers;
 
 [ApiController]
 [Route("api/classification-operations")]
 [Authorize(Roles = "ClassificationStaff")]
-public class ClassificationOperationsController(IClassificationOperationsService service) : ControllerBase
+public class ClassificationOperationsController(IClassificationOperationsService service,
+    GeminiClassificationService aiService) : ControllerBase
 {
     [HttpGet("batches")]
     public async Task<IActionResult> GetBatches() => Ok(await service.GetBatchesAsync(CurrentUserId));
@@ -23,6 +25,16 @@ public class ClassificationOperationsController(IClassificationOperationsService
 
     [HttpGet("catalog")]
     public async Task<IActionResult> GetCatalog() => Ok(await service.GetCatalogAsync());
+
+    [HttpGet("classified-area-layout")]
+    public async Task<IActionResult> GetClassifiedAreaLayout([FromQuery] DateTime? date) =>
+        Ok(await service.GetClassificationAreaLayoutAsync(CurrentUserId, date));
+
+    [HttpPost("analyze-images")]
+    [RequestSizeLimit(50_000_000)]
+    public async Task<IActionResult> AnalyzeImages(AnalyzeClassificationImagesDto dto,
+        CancellationToken cancellationToken) =>
+        Ok(await aiService.AnalyzeAsync(await service.GetCatalogAsync(), dto, cancellationToken));
 
     [HttpPost("batches/{batchId:guid}/start")]
     public async Task<IActionResult> Start(Guid batchId)

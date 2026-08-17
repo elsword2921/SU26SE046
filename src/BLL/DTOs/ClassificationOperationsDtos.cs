@@ -51,6 +51,15 @@ public record ClassificationCatalogDto(IReadOnlyList<CategoryOptionDto> FabricTy
     IReadOnlyList<CategoryOptionDto> Sizes, IReadOnlyList<CategoryOptionDto> ConditionGrades,
     IReadOnlyList<ClassificationQuestionDto> ConditionQuestions);
 
+public class AnalyzeClassificationImagesDto
+{
+    public List<string> ImageDataUrls { get; set; } = [];
+}
+
+public record AiClassificationSuggestionDto(Guid FabricTypeId, Guid GarmentGroupId,
+    Guid ClothingTypeId, Guid GenderId, Guid TargetUserId, Guid SizeId,
+    IReadOnlyList<ClassificationAnswerDto> Answers, double Confidence, string Summary);
+
 public record GroupedClassifiedBatchDto(Guid Id, string BatchCode, DateTime ClassificationDate,
     string FabricType, string GarmentGroup, string ClothingType, string Gender, string TargetUser,
     string Size, string ConditionGrade, string ProcessingDirection, int TotalItem, string Status,
@@ -65,6 +74,17 @@ public record GroupedClassifiedBatchDetailDto(Guid Id, string BatchCode, DateTim
 
 public record SendGroupedBatchesToWarehouseDto(IReadOnlyList<Guid> GroupedBatchIds);
 public record SendGroupedBatchesToWarehouseResultDto(int Sent, int Skipped);
+
+public record ClassificationAreaLayoutDto(Guid WarehouseId, string WarehouseName,
+    IReadOnlyList<ClassificationAreaDto> Areas, IReadOnlyList<GroupedClassifiedBatchDto> UnassignedBatches);
+public record ClassificationAreaDto(Guid Id, string AreaName, string? Description,
+    decimal CapacityKg, decimal CurrentKg, IReadOnlyList<ClassificationAreaGroupDto> Groups);
+public record ClassificationAreaGroupDto(Guid Id, string GroupName, string? Description,
+    decimal CapacityKg, decimal CurrentKg, IReadOnlyList<ClassificationLocationDto> Locations,
+    IReadOnlyList<GroupedClassifiedBatchDto> Batches);
+public record ClassificationLocationDto(Guid Id, string LocationCode, string AisleCode,
+    string RackCode, string ShelfCode, string BinCode, decimal CapacityKg,
+    decimal CurrentWeightKg, string Status);
 
 public record AssignClassificationBatchDto(Guid TeamId);
 public record ClassificationStaffOptionDto(Guid Id, string FullName, string UserName,
