@@ -1,6 +1,7 @@
 # Build outputs
 artifacts/
 .build-check/
+.codex-build/
 [Bb]in/
 [Oo]bj/
 
