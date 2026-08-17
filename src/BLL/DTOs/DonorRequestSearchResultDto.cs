@@ -11,6 +11,9 @@ namespace BLL.DTOs
         public string PhoneNumber { get; set; } = string.Empty;
 
         public string DeliveryMethod { get; set; } = string.Empty;
+        public string? DropOffMethod { get; set; }
+        public string? CarrierName { get; set; }
+        public string? TrackingCode { get; set; }
 
         public string? Description { get; set; }
 

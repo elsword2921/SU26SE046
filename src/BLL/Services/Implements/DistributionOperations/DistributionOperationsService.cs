@@ -166,10 +166,10 @@ public class DistributionOperationsService(AppDbContext context, HttpClient ghnC
         var client=ghnClient;
         client.DefaultRequestHeaders.TryAddWithoutValidation("Token",token);
         client.DefaultRequestHeaders.TryAddWithoutValidation("ShopId",shopId);
-        _=int.TryParse(configuration["Ghn:PickupDistrictId"],out var pickupDistrictId);
-        var pickupWardCode=configuration["Ghn:PickupWardCode"];
-        if(pickupDistrictId<=0||string.IsNullOrWhiteSpace(pickupWardCode))
-            throw new InvalidOperationException("GHN pickup district and ward are not configured on the server.");
+        if(string.IsNullOrWhiteSpace(dto.FromName)||string.IsNullOrWhiteSpace(dto.FromPhone)
+            ||string.IsNullOrWhiteSpace(dto.FromAddress)||dto.FromDistrictId<=0
+            ||string.IsNullOrWhiteSpace(dto.FromWardCode))
+            throw new InvalidOperationException("Pickup contact, address, district and ward are required.");
         var weight=(int)Math.Ceiling(request.Items.Sum(x=>x.IssuedWeight)*1000);
         var serviceTypeId=weight>50000?5:(dto.ServiceTypeId<=0?2:dto.ServiceTypeId);
         var items=new List<Dictionary<string,object>>();
@@ -197,10 +197,9 @@ public class DistributionOperationsService(AppDbContext context, HttpClient ghnC
         var payload=new Dictionary<string,object?>{
             ["payment_type_id"]=dto.PaymentTypeId,["service_type_id"]=serviceTypeId,
             ["required_note"]=dto.RequiredNote??"KHONGCHOXEMHANG",
-            ["from_name"]=configuration["Ghn:PickupName"]??request.Warehouse.WarehouseName,
-            ["from_phone"]=configuration["Ghn:PickupPhone"]??request.Warehouse.PhoneNumber??"0900000000",
-            ["from_address"]=configuration["Ghn:PickupAddress"]??request.Warehouse.Address,
-            ["from_district_id"]=pickupDistrictId,["from_ward_code"]=pickupWardCode,
+            ["from_name"]=dto.FromName.Trim(),["from_phone"]=dto.FromPhone.Trim(),
+            ["from_address"]=dto.FromAddress.Trim(),
+            ["from_district_id"]=dto.FromDistrictId,["from_ward_code"]=dto.FromWardCode.Trim(),
             ["to_name"]=request.RecipientName,["to_phone"]=request.RecipientPhone,
             ["to_address"]=request.ToAddress,["to_district_id"]=dto.ToDistrictId,
             ["to_ward_code"]=dto.ToWardCode,["client_order_code"]=request.IssueSlipCode,["items"]=items,
@@ -238,7 +237,7 @@ public class DistributionOperationsService(AppDbContext context, HttpClient ghnC
     private IQueryable<DistributionRequest> Query()=>context.DistributionRequests.AsNoTracking().Where(x=>x.IsActive!=false)
         .Include(x=>x.User).Include(x=>x.Warehouse).Include(x=>x.WarehouseIssuedByStaff).Include(x=>x.Items).ThenInclude(x=>x.Inventory)
         .Include(x=>x.ShipmentHistory).OrderByDescending(x=>x.RequestedAt);
-    private static System.Linq.Expressions.Expression<Func<DistributionRequest,DistributionRequestViewDto>> Map()=>x=>new DistributionRequestViewDto(x.Id,x.RequestCode,x.UserId,x.User.FullName,x.WarehouseId,x.Warehouse.WarehouseName,x.RecipientName,x.RecipientPhone,x.ToAddress,x.Status,x.RequestNotes,x.RejectReason,x.RequestedAt,x.ApprovedAt,x.IssueSlipCode,x.WarehouseIssuedAt,x.WarehouseIssuedByStaff!=null?x.WarehouseIssuedByStaff.FullName:null,x.GhnOrderCode,x.GhnStatus,x.GhnUpdatedAt,x.Items.Select(i=>new DistributionItemViewDto(i.Id,i.InventoryId,i.Inventory.ClassifiedBatch!.BatchCode,i.Inventory.Sku,i.Inventory.ClothingType,i.Inventory.FabricType,i.Inventory.Gender,i.Inventory.TargetUser,i.Inventory.Size,i.RequestedQuantity,i.ApprovedQuantity,i.IssuedQuantity,i.RequestedWeight,i.IssuedWeight)).ToList(),x.ShipmentHistory.OrderByDescending(h=>h.OccurredAt).Select(h=>new ShipmentEventDto(h.Status,h.Description,h.Source,h.OccurredAt)).ToList());
+    private static System.Linq.Expressions.Expression<Func<DistributionRequest,DistributionRequestViewDto>> Map()=>x=>new DistributionRequestViewDto(x.Id,x.RequestCode,x.UserId,x.User.FullName,x.WarehouseId,x.Warehouse.WarehouseName,x.Warehouse.Address,x.Warehouse.PhoneNumber,x.RecipientName,x.RecipientPhone,x.ToAddress,x.Status,x.RequestNotes,x.RejectReason,x.RequestedAt,x.ApprovedAt,x.IssueSlipCode,x.WarehouseIssuedAt,x.WarehouseIssuedByStaff!=null?x.WarehouseIssuedByStaff.FullName:null,x.GhnOrderCode,x.GhnStatus,x.GhnUpdatedAt,x.Items.Select(i=>new DistributionItemViewDto(i.Id,i.InventoryId,i.Inventory.ClassifiedBatch!.BatchCode,i.Inventory.Sku,i.Inventory.ClothingType,i.Inventory.FabricType,i.Inventory.Gender,i.Inventory.TargetUser,i.Inventory.Size,i.RequestedQuantity,i.ApprovedQuantity,i.IssuedQuantity,i.RequestedWeight,i.IssuedWeight)).ToList(),x.ShipmentHistory.OrderByDescending(h=>h.OccurredAt).Select(h=>new ShipmentEventDto(h.Status,h.Description,h.Source,h.OccurredAt)).ToList());
     private static string BuildRequestCode(Guid id)=>$"DIST-{id.ToString("N")[..8].ToUpperInvariant()}";
     private static string Grade(int value)=>value==1?"A":value==2?"B":"C";
     private static void ValidateRequest(CreateDistributionRequestDto dto)

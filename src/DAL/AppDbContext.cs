@@ -348,6 +348,12 @@ namespace DAL
                 .HasForeignKey(x => x.GroupId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            modelBuilder.Entity<ClassifiedBatch>()
+                .HasOne(x => x.StorageLocation)
+                .WithMany()
+                .HasForeignKey(x => x.StorageLocationId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             modelBuilder.Entity<ClassifiedBatch>().HasOne(x => x.PlacedInClassificationAreaByStaff).WithMany()
                 .HasForeignKey(x => x.PlacedInClassificationAreaByStaffId).OnDelete(DeleteBehavior.Restrict);
             modelBuilder.Entity<ClassifiedBatch>().HasOne(x => x.RemovedFromClassificationAreaByStaff).WithMany()

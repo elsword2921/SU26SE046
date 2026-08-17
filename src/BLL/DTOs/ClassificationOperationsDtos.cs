@@ -5,7 +5,9 @@ public record ClassificationBatchSummaryDto(Guid Id, string BatchCode, string Ro
     int? CountedItemCount, decimal? CountedTotalWeight, DateTime? CountedAt,
     string? ClassificationAreaName, DateTime? ClassifiedAreaPlacedAt,
     Guid? ClassificationTeamId = null, string? ClassificationTeamName = null,
-    string? TeamStatus = null, string? CurrentAreaName = null);
+    string? TeamStatus = null, string? CurrentAreaName = null,
+    DateTime? TeamShiftDate = null, TimeSpan? TeamShiftStartTime = null,
+    TimeSpan? TeamShiftEndTime = null);
 
 public record ClassificationItemDto(Guid Id, string ItemCode, string FabricType, string GarmentGroup,
     string ClothingType, string Gender, string TargetUser, string Size, string ConditionGrade,
@@ -64,7 +66,7 @@ public record GroupedClassifiedBatchDto(Guid Id, string BatchCode, DateTime Clas
     string FabricType, string GarmentGroup, string ClothingType, string Gender, string TargetUser,
     string Size, string ConditionGrade, string ProcessingDirection, int TotalItem, string Status,
     decimal TotalWeight, string? ClassificationAreaName, DateTime? PlacedInClassificationAreaAt,
-    IReadOnlyList<string> DonationRequestCodes);
+    Guid? StorageLocationId, IReadOnlyList<string> DonationRequestCodes);
 
 public record GroupedClassifiedBatchDetailDto(Guid Id, string BatchCode, DateTime ClassificationDate,
     string FabricType, string GarmentGroup, string ClothingType, string Gender, string TargetUser,
@@ -74,6 +76,7 @@ public record GroupedClassifiedBatchDetailDto(Guid Id, string BatchCode, DateTim
 
 public record SendGroupedBatchesToWarehouseDto(IReadOnlyList<Guid> GroupedBatchIds);
 public record SendGroupedBatchesToWarehouseResultDto(int Sent, int Skipped);
+public record PlaceGroupedClassifiedBatchDto(Guid AreaId, Guid GroupId, Guid StorageLocationId);
 
 public record ClassificationAreaLayoutDto(Guid WarehouseId, string WarehouseName,
     IReadOnlyList<ClassificationAreaDto> Areas, IReadOnlyList<GroupedClassifiedBatchDto> UnassignedBatches);

@@ -24,8 +24,10 @@ public interface IReceivingOperationsService
         Guid? warehouseId = null, DateTime? fromDate = null, DateTime? toDate = null);
     Task AssignRequestAsync(AssignDonationRequestDto dto);
     Task<List<ReceivingBatchDto>> GetMyBatchesAsync(Guid staffId);
+    Task<List<ReceivingLocationBatchDto>> GetLocationBatchesAsync(Guid staffId, Guid locationId);
     Task<ReceivingBatchDto?> GetMyBatchAsync(Guid staffId, Guid batchId);
     Task StartBatchAsync(Guid staffId, Guid batchId);
+    Task StartTeamAsync(Guid staffId, Guid teamId);
     Task CompleteShiftAsync(Guid staffId, Guid shiftId);
     Task ConfirmPickupAsync(Guid staffId, Guid batchId, Guid requestId, ConfirmPickupDto dto);
     Task<WarehouseDropOffBoardDto> GetMyWarehouseDropOffsAsync(Guid staffId);

@@ -42,9 +42,7 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IEmailVerificationSender, EmailVerificationSender>();
 builder.Services.AddHttpClient<DonorRequestService>(client =>
 {
-    client.BaseAddress = new Uri("https://nominatim.openstreetmap.org/");
-    client.DefaultRequestHeaders.UserAgent.ParseAdd("ReThreads/1.0 (warehouse-routing)");
-    client.DefaultRequestHeaders.AcceptLanguage.ParseAdd("vi");
+    client.BaseAddress = new Uri("https://api.geoapify.com/");
 });
 builder.Services.AddScoped<IDonorRequestService>(provider =>
     provider.GetRequiredService<DonorRequestService>());
@@ -118,17 +116,50 @@ builder.Services
     };
 });
 
+var configuredCorsOrigins = builder.Configuration
+    .GetSection("Cors:AllowedOrigins")
+    .Get<string[]>() ?? [];
+var environmentCorsOrigins = (builder.Configuration["CORS_ALLOWED_ORIGINS"] ?? string.Empty)
+    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+var allowedCorsOrigins = configuredCorsOrigins
+    .Concat(environmentCorsOrigins)
+    .Select(origin => origin.Trim().TrimEnd('/'))
+    .Where(origin => !string.IsNullOrWhiteSpace(origin))
+    .Distinct(StringComparer.OrdinalIgnoreCase)
+    .ToArray();
+
+static bool IsCorsOriginAllowed(string origin, IReadOnlyCollection<string> allowedOrigins)
+{
+    if (!Uri.TryCreate(origin, UriKind.Absolute, out var requestOrigin)) return false;
+
+    foreach (var allowedOrigin in allowedOrigins)
+    {
+        if (!allowedOrigin.Contains('*'))
+        {
+            if (string.Equals(origin.TrimEnd('/'), allowedOrigin, StringComparison.OrdinalIgnoreCase))
+                return true;
+            continue;
+        }
+
+        if (!Uri.TryCreate(allowedOrigin.Replace("*.", "wildcard."), UriKind.Absolute,
+                out var wildcardOrigin)) continue;
+        var hostSuffix = wildcardOrigin.Host["wildcard".Length..];
+        if (requestOrigin.Scheme.Equals(wildcardOrigin.Scheme, StringComparison.OrdinalIgnoreCase)
+            && requestOrigin.Host.EndsWith(hostSuffix, StringComparison.OrdinalIgnoreCase)
+            && requestOrigin.Host.Length > hostSuffix.Length)
+            return true;
+    }
+
+    return false;
+}
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("React",
-        policy =>
-        {
-            policy
-                .WithOrigins("http://localhost:5173")
-                .AllowAnyHeader()
-                .AllowAnyMethod()
-                .AllowCredentials();
-        });
+    options.AddPolicy("React", policy => policy
+        .SetIsOriginAllowed(origin => IsCorsOriginAllowed(origin, allowedCorsOrigins))
+        .AllowAnyHeader()
+        .AllowAnyMethod()
+        .AllowCredentials());
 });
 
 var app = builder.Build();

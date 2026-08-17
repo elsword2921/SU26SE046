@@ -22,7 +22,8 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
         var actualWeight = await GetWarehouseActualWeightAsync(warehouseId);
         return new WarehouseDetailsDto(warehouse.Id, warehouse.WarehouseName, warehouse.Address,
             warehouse.PhoneNumber, warehouse.Email, warehouse.Description, warehouse.TotalCapacityKg,
-            actualWeight, allocatedAreaCapacity);
+            actualWeight, allocatedAreaCapacity, warehouse.Latitude, warehouse.Longitude,
+            warehouse.ServiceRadiusKm);
     }
 
     public async Task<Guid> CreateWarehouseAsync(Guid userId, CreateWarehouseDto dto)
@@ -41,6 +42,9 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
         if (!string.IsNullOrWhiteSpace(dto.Email)
             && !System.Net.Mail.MailAddress.TryCreate(dto.Email.Trim(), out _))
             throw new InvalidOperationException("Warehouse email format is invalid.");
+        if (dto.ServiceRadiusKm is < 1 or > 200)
+            throw new InvalidOperationException("Warehouse service radius must be between 1 and 200 km.");
+        ValidateCoordinates(dto);
 
         var normalizedName = name.ToLower();
         var normalizedAddress = address.ToLower();
@@ -57,6 +61,8 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
             PhoneNumber = string.IsNullOrWhiteSpace(dto.PhoneNumber) ? null : dto.PhoneNumber.Trim(),
             Email = string.IsNullOrWhiteSpace(dto.Email) ? null : dto.Email.Trim().ToLowerInvariant(),
             Description = string.IsNullOrWhiteSpace(dto.Description) ? null : dto.Description.Trim(),
+            Latitude = dto.Latitude, Longitude = dto.Longitude,
+            ServiceRadiusKm = dto.ServiceRadiusKm,
             TotalCapacityKg = dto.TotalCapacityKg, CurrentWeight = 0,
             CreateAt = DateTime.UtcNow, CreatedBy = userId, IsActive = true
         };
@@ -98,6 +104,9 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
         warehouse.PhoneNumber = string.IsNullOrWhiteSpace(dto.PhoneNumber) ? null : dto.PhoneNumber.Trim();
         warehouse.Email = string.IsNullOrWhiteSpace(dto.Email) ? null : dto.Email.Trim().ToLowerInvariant();
         warehouse.Description = string.IsNullOrWhiteSpace(dto.Description) ? null : dto.Description.Trim();
+        warehouse.Latitude = dto.Latitude;
+        warehouse.Longitude = dto.Longitude;
+        warehouse.ServiceRadiusKm = dto.ServiceRadiusKm;
         warehouse.TotalCapacityKg = dto.TotalCapacityKg;
         warehouse.CurrentWeight = actualWeight;
         warehouse.UpdateAt = DateTime.UtcNow;
@@ -1184,6 +1193,17 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
         if (!string.IsNullOrWhiteSpace(dto.Email)
             && !System.Net.Mail.MailAddress.TryCreate(dto.Email.Trim(), out _))
             throw new InvalidOperationException("Warehouse email format is invalid.");
+        if (dto.ServiceRadiusKm is < 1 or > 200)
+            throw new InvalidOperationException("Warehouse service radius must be between 1 and 200 km.");
+        ValidateCoordinates(dto);
+    }
+
+    private static void ValidateCoordinates(CreateWarehouseDto dto)
+    {
+        if (dto.Latitude.HasValue != dto.Longitude.HasValue)
+            throw new InvalidOperationException("Warehouse latitude and longitude must be provided together.");
+        if (dto.Latitude is < -90 or > 90 || dto.Longitude is < -180 or > 180)
+            throw new InvalidOperationException("Warehouse coordinates are invalid.");
     }
 
     private async Task<decimal> GetWarehouseActualWeightAsync(Guid warehouseId)

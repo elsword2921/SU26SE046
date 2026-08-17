@@ -7,6 +7,7 @@ namespace BLL.Services.Interfaces.DonorRequestService
         Task<Guid> CreateAsync(Guid donorId, CreateDonorRequestDto dto);
 
         Task UpdateAsync(Guid donorId, Guid requestId, UpdateDonorRequestDto dto);
+        Task UpdateShippingInfoAsync(Guid donorId, Guid requestId, UpdateShippingInfoDto dto);
 
         Task CancelAsync(Guid donorId, Guid requestId);
 

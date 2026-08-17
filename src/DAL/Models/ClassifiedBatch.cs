@@ -7,6 +7,7 @@ public class ClassifiedBatch : BaseEntity
     public Guid WarehouseId { get; set; }
     public Guid? GroupId { get; set; }
     public Guid? AreaId { get; set; }
+    public Guid? StorageLocationId { get; set; }
     public Guid? FabricTypeId { get; set; }
     public Guid? GarmentGroupId { get; set; }
     public Guid? ClothingTypeId { get; set; }
@@ -45,6 +46,7 @@ public class ClassifiedBatch : BaseEntity
     public virtual Warehouse Warehouse { get; set; } = null!;
     public virtual AreaGroup? Group { get; set; }
     public virtual WarehouseArea? Area { get; set; }
+    public virtual StorageLocation? StorageLocation { get; set; }
     public virtual User? SentToWarehouseByStaff { get; set; }
     public virtual User? PlacedInClassificationAreaByStaff { get; set; }
     public virtual User? RemovedFromClassificationAreaByStaff { get; set; }

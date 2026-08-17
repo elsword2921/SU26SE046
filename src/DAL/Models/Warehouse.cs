@@ -13,6 +13,7 @@ namespace DAL.Models
         public decimal CurrentWeight { get; set; }
         public double? Latitude { get; set; }
         public double? Longitude { get; set; }
+        public double ServiceRadiusKm { get; set; } = 24;
 
         // Navigation
         public virtual ICollection<User> Users { get; set; }

@@ -35,19 +35,22 @@ public record ConfirmPickupDto(decimal ActualWeight, string? Notes, List<string>
 public record ReschedulePickupDto(DateTime PickupDate, string? Reason);
 public record RejectPickupDto(string Reason);
 public record WarehouseDutyContextDto(Guid TeamId, string TeamName, Guid ShiftId, string ShiftName,
-    DateTime ShiftDate, TimeSpan StartTime, TimeSpan EndTime, string ShiftStatus,
-    Guid WarehouseId, string WarehouseName, string WarehouseAddress, Guid? IntakeBatchId);
+    DateTime ShiftDate, TimeSpan StartTime, TimeSpan EndTime, string ShiftStatus, string TeamStatus,
+    Guid WarehouseId, string WarehouseName, string WarehouseAddress, Guid? IntakeBatchId,
+    List<ReceivingTeamMemberDto> Members);
 public record WarehouseDropOffItemDto(Guid Id, Guid WarehouseId, string Code, string ContactName, string PhoneNumber,
     string Address, DateTime ExpectedDate, string Description, decimal EstimateWeight,
-    string Status, List<string>? ImageUrls);
+    string Status, List<string>? ImageUrls, string? DropOffMethod, string? CarrierName, string? TrackingCode);
 public record WarehouseDropOffBoardDto(List<WarehouseDutyContextDto> DutyContexts,
     List<WarehouseDropOffItemDto> Requests);
 public record ReceivingStagingLocationDto(Guid Id, string LocationCode, string AisleCode,
     string RackCode, string ShelfCode, string BinCode, decimal CapacityKg,
-    decimal CurrentKg, decimal AvailableKg, string Status);
+    decimal CurrentKg, decimal AvailableKg, string Status, int BatchCount);
 public record ReceivingStagingGroupDto(Guid Id, string GroupName, string AreaName,
     decimal CapacityKg, decimal CurrentKg, decimal AvailableKg,
     List<ReceivingStagingLocationDto> Locations);
+public record ReceivingLocationBatchDto(Guid Id, string Code, string Route,
+    decimal TotalWeight, string Status, bool CanManage);
 public record ReceiveIntakeBatchAtWarehouseDto(Guid AreaGroupId, Guid StorageLocationId);
 
 public class ReceivingBatchDto
@@ -59,6 +62,7 @@ public class ReceivingBatchDto
     public string ShiftName { get; set; } = string.Empty;
     public Guid ShiftId { get; set; }
     public string ShiftStatus { get; set; } = string.Empty;
+    public string TeamStatus { get; set; } = string.Empty;
     public TimeSpan StartTime { get; set; }
     public TimeSpan EndTime { get; set; }
     public string Status { get; set; } = string.Empty;

@@ -80,6 +80,15 @@ namespace Capstone_API.Controllers
                 Message = "Donation request cancelled successfully."
             });
         }
+
+        [HttpPatch("{id}/shipping-info")]
+        [Authorize(Roles = "Donor")]
+        public async Task<IActionResult> UpdateShippingInfo(Guid id, UpdateShippingInfoDto dto)
+        {
+            Guid donorId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+            await _service.UpdateShippingInfoAsync(donorId, id, dto);
+            return Ok(new { Message = "Shipping information updated successfully." });
+        }
         [HttpGet("my")]
         [Authorize(Roles = "Donor")]
         public async Task<IActionResult> GetMyRequests()

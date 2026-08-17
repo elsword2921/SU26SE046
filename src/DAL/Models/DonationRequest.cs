@@ -17,6 +17,12 @@ namespace DAL.Models
 
         public string DeliveryMethod { get; set; } = "StaffPickup";
 
+        public string? DropOffMethod { get; set; }
+
+        public string? CarrierName { get; set; }
+
+        public string? TrackingCode { get; set; }
+
         public List<string>? ImageUrls { get; set; }
 
         public string? Description { get; set; }

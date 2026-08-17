@@ -33,7 +33,9 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
                 x.CountedItemCount, x.CountedTotalWeight, x.CountedAt,
                 x.ClassificationAreaName, x.ClassifiedAreaPlacedAt, x.ClassificationTeamId,
                 x.ClassificationTeam!.TeamName, x.ClassificationTeam.Status,
-                x.CurrentArea != null ? x.CurrentArea.AreaName : null)).ToListAsync();
+                x.CurrentArea != null ? x.CurrentArea.AreaName : null,
+                x.ClassificationTeam.Shift.ShiftDate, x.ClassificationTeam.Shift.StartTime,
+                x.ClassificationTeam.Shift.EndTime)).ToListAsync();
 
     public async Task<ClassificationBatchDetailDto?> GetBatchAsync(Guid staffId, Guid batchId)
     {
@@ -308,6 +310,7 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
                 x.ConditionRating == 1 ? "A" : x.ConditionRating == 2 ? "B" : "C",
                 x.ProcessingDirection, x.TotalItem, x.Status, x.TotalWeight,
                 x.ClassificationAreaName, x.PlacedInClassificationAreaAt,
+                x.StorageLocationId,
                 x.DonationRequestSources.Where(s => s.IsActive != false)
                     .Select(s => s.DonationRequest.RequestCode).Distinct().OrderBy(code => code).ToList()))
             .ToListAsync();
@@ -330,7 +333,7 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
         var areaIds = areas.Select(x => x.Id).ToList();
         var query = context.ClassifiedBatches.AsNoTracking()
             .Where(x => x.WarehouseId == warehouse.Id && x.Status == "Open"
-                && x.PlacedInClassificationAreaAt.HasValue && x.IsActive != false);
+                && x.IsActive != false);
         if (date.HasValue) query = query.Where(x => x.ClassificationDate == date.Value.Date);
         var batches = await query.Include(x => x.DonationRequestSources.Where(s => s.IsActive != false))
             .ThenInclude(x => x.DonationRequest).OrderBy(x => x.BatchCode).ToListAsync();
@@ -338,6 +341,7 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
             x.FabricType, x.GarmentGroup, x.ClothingType, x.Gender, x.TargetUser, x.Size,
             Grade(x.ConditionRating), x.ProcessingDirection, x.TotalItem, x.Status, x.TotalWeight,
             x.ClassificationAreaName, x.PlacedInClassificationAreaAt,
+            x.StorageLocationId,
             x.DonationRequestSources.Select(s => s.DonationRequest.RequestCode).Distinct().OrderBy(c => c).ToList());
         return new ClassificationAreaLayoutDto(warehouse.Id, warehouse.WarehouseName,
             areas.Select(area => new ClassificationAreaDto(area.Id, area.AreaName, area.Description,
@@ -380,6 +384,8 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
             throw new InvalidOperationException("Only an open classified batch can be sent to warehouse.");
         if (!batch.PlacedInClassificationAreaAt.HasValue)
             throw new InvalidOperationException("Complete classification and place the batch in the classified area first.");
+        if (!batch.StorageLocationId.HasValue)
+            throw new InvalidOperationException("Select a storage location before sending the batch to warehouse.");
         if (!batch.Items.Any(x => x.IsActive != false))
             throw new InvalidOperationException("The classified batch does not contain any item.");
 
@@ -391,6 +397,7 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
         batch.RemovedFromClassificationAreaByStaffId = staffId;
         batch.UpdateAt = DateTime.UtcNow;
         batch.UpdatedBy = staffId;
+        await ReleaseGroupedBatchCapacityAsync(batch);
         var sourceIds = await context.ClassifiedBatchDonationRequests
             .Where(x => x.ClassifiedBatchId == groupedBatchId && x.IsActive != false)
             .Select(x => x.DonationRequestId).ToListAsync();
@@ -418,7 +425,7 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
         var sentBatchIds = new List<Guid>();
         foreach (var batch in batches.Where(x => x.Status == "Open"))
         {
-            if (!batch.PlacedInClassificationAreaAt.HasValue)
+            if (!batch.PlacedInClassificationAreaAt.HasValue || !batch.StorageLocationId.HasValue)
                 continue;
             var itemCount = batch.Items.Count(x => x.IsActive != false);
             if (itemCount == 0)
@@ -433,6 +440,7 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
             batch.RemovedFromClassificationAreaByStaffId = staffId;
             batch.UpdateAt = now;
             batch.UpdatedBy = staffId;
+            await ReleaseGroupedBatchCapacityAsync(batch);
             sentBatchIds.Add(batch.Id);
             sent++;
         }
@@ -466,29 +474,44 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
 
         var now = DateTime.UtcNow;
         const string areaName = "Khu đã phân loại";
-        var classifiedArea = await EnsureAreaAsync(batch.WarehouseId, "Classified", areaName,
-            "Khu lưu Intake Batch đã hoàn tất phân loại, chờ chuyển kho lưu trữ.");
-        await MoveBatchToStagingAreaAsync(batch, classifiedArea);
+        await RemoveBatchFromCurrentAreaAsync(batch);
         batch.Status = "InClassifiedArea";
         batch.ClassificationCompletedAt = now;
         batch.ClassificationCompletedByStaffId = staffId;
         batch.ClassificationAreaName = areaName;
-        batch.CurrentAreaId = classifiedArea.Id;
-        batch.ClassifiedAreaPlacedAt = now;
-        batch.ClassifiedAreaPlacedByStaffId = staffId;
+        batch.CurrentAreaId = null;
+        batch.CurrentAreaGroupId = null;
+        batch.CurrentStorageLocationId = null;
+        batch.ClassifiedAreaPlacedAt = null;
+        batch.ClassifiedAreaPlacedByStaffId = null;
         batch.UpdateAt = now;
         batch.UpdatedBy = staffId;
 
         var groupedBatches = await context.ClassifiedBatches
             .Where(x => x.Items.Any(i => i.BatchId == batchId && i.IsActive != false) && x.IsActive != false)
             .ToListAsync();
-        foreach (var groupedBatch in groupedBatches)
+        var itemCountsByGroup = await context.ClassifiedItems
+            .Where(x => x.BatchId == batchId && x.IsActive != false && x.ClassifiedBatchId.HasValue)
+            .GroupBy(x => x.ClassifiedBatchId!.Value)
+            .ToDictionaryAsync(x => x.Key, x => x.Count());
+        var remainingWeight = batch.TotalWeight;
+        for (var groupedIndex = 0; groupedIndex < groupedBatches.Count; groupedIndex++)
         {
-            groupedBatch.AreaId = classifiedArea.Id;
-            groupedBatch.GroupId = batch.CurrentAreaGroupId;
-            groupedBatch.ClassificationAreaName = areaName;
-            groupedBatch.PlacedInClassificationAreaAt ??= now;
-            groupedBatch.PlacedInClassificationAreaByStaffId ??= staffId;
+            var groupedBatch = groupedBatches[groupedIndex];
+            if (itemCountsByGroup.TryGetValue(groupedBatch.Id, out var groupedItemCount) && itemCount > 0)
+            {
+                var allocatedWeight = groupedIndex == groupedBatches.Count - 1
+                    ? remainingWeight
+                    : decimal.Round(batch.TotalWeight * groupedItemCount / itemCount, 2,
+                        MidpointRounding.AwayFromZero);
+                groupedBatch.TotalWeight += allocatedWeight;
+                remainingWeight -= allocatedWeight;
+            }
+            groupedBatch.AreaId = null;
+            groupedBatch.GroupId = null;
+            groupedBatch.ClassificationAreaName = null;
+            groupedBatch.PlacedInClassificationAreaAt = null;
+            groupedBatch.PlacedInClassificationAreaByStaffId = null;
             groupedBatch.UpdateAt = now;
             groupedBatch.UpdatedBy = staffId;
         }
@@ -510,13 +533,100 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
         if (team.Status != "Scheduled")
             throw new InvalidOperationException("Classification team has already started or completed this shift.");
         var now = VietnamTime.Now;
+        var shiftStart = team.Shift.ShiftDate.Date.Add(team.Shift.StartTime);
         var shiftEnd = team.Shift.ShiftDate.Date.Add(team.Shift.EndTime);
+        if (now < shiftStart) throw new InvalidOperationException("The classification shift has not started yet.");
         if (now >= shiftEnd) throw new InvalidOperationException("The classification shift has already ended.");
         team.Status = "InProgress";
         team.StartedAt = now;
         team.StartedByStaffId = staffId;
         team.UpdateAt = now;
         await context.SaveChangesAsync();
+    }
+
+    public async Task PlaceGroupedBatchAsync(Guid staffId, Guid groupedBatchId, PlaceGroupedClassifiedBatchDto dto)
+    {
+        var staff = await context.Users.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == staffId && x.IsActive != false)
+            ?? throw new InvalidOperationException("Classification staff not found.");
+        if (!staff.WarehouseId.HasValue)
+            throw new InvalidOperationException("Classification staff is not assigned to a warehouse.");
+
+        var batch = await context.ClassifiedBatches
+            .FirstOrDefaultAsync(x => x.Id == groupedBatchId && x.IsActive != false)
+            ?? throw new InvalidOperationException("Classified batch not found.");
+        if (batch.WarehouseId != staff.WarehouseId.Value)
+            throw new InvalidOperationException("Classified batch is not in your warehouse.");
+        if (batch.Status != "Open")
+            throw new InvalidOperationException("Only an open classified batch can be placed.");
+        if (batch.PlacedInClassificationAreaAt.HasValue)
+            throw new InvalidOperationException("Classified batch has already been placed.");
+
+        var area = await context.WarehouseAreas.FirstOrDefaultAsync(x => x.Id == dto.AreaId
+            && x.WarehouseId == batch.WarehouseId && x.AreaType == "Classified" && x.IsActive != false)
+            ?? throw new InvalidOperationException("Classified area not found.");
+        var group = await context.AreaGroups.FirstOrDefaultAsync(x => x.Id == dto.GroupId
+            && x.AreaId == area.Id && x.IsActive != false)
+            ?? throw new InvalidOperationException("Aisle does not belong to the selected area.");
+        var location = await context.StorageLocations.FirstOrDefaultAsync(x =>
+            x.Id == dto.StorageLocationId && x.WarehouseId == batch.WarehouseId
+            && x.AreaId == area.Id && x.AreaGroupId == group.Id && x.IsActive != false)
+            ?? throw new InvalidOperationException("Storage location does not belong to the selected aisle.");
+        if (group.CurrentKg + batch.TotalWeight > group.CapacityKg
+            || area.CurrentKg + batch.TotalWeight > area.CapacityKg
+            || location.CurrentWeightKg + batch.TotalWeight > location.CapacityKg)
+            throw new InvalidOperationException("The selected area, aisle, or storage location does not have enough capacity.");
+
+        var placedAt = VietnamTime.Now;
+        batch.AreaId = area.Id;
+        batch.GroupId = group.Id;
+        batch.StorageLocationId = location.Id;
+        batch.ClassificationAreaName = area.AreaName;
+        batch.PlacedInClassificationAreaAt = placedAt;
+        batch.PlacedInClassificationAreaByStaffId = staffId;
+        batch.UpdateAt = placedAt;
+        batch.UpdatedBy = staffId;
+        group.CurrentKg += batch.TotalWeight;
+        group.UpdateAt = placedAt;
+        area.CurrentKg += batch.TotalWeight;
+        area.UpdateAt = placedAt;
+        location.CurrentWeightKg += batch.TotalWeight;
+        location.Status = location.CurrentWeightKg >= location.CapacityKg ? "Full" : "Available";
+        location.UpdateAt = placedAt;
+        await context.SaveChangesAsync();
+    }
+
+    private async Task ReleaseGroupedBatchCapacityAsync(ClassifiedBatch batch)
+    {
+        if (batch.GroupId.HasValue)
+        {
+            var group = await context.AreaGroups.FirstOrDefaultAsync(x => x.Id == batch.GroupId.Value);
+            if (group is not null)
+            {
+                group.CurrentKg = Math.Max(0, group.CurrentKg - batch.TotalWeight);
+                group.UpdateAt = VietnamTime.Now;
+            }
+        }
+        if (batch.AreaId.HasValue)
+        {
+            var area = await context.WarehouseAreas.FirstOrDefaultAsync(x => x.Id == batch.AreaId.Value);
+            if (area is not null)
+            {
+                area.CurrentKg = Math.Max(0, area.CurrentKg - batch.TotalWeight);
+                area.UpdateAt = VietnamTime.Now;
+            }
+        }
+        if (batch.StorageLocationId.HasValue)
+        {
+            var location = await context.StorageLocations
+                .FirstOrDefaultAsync(x => x.Id == batch.StorageLocationId.Value);
+            if (location is not null)
+            {
+                location.CurrentWeightKg = Math.Max(0, location.CurrentWeightKg - batch.TotalWeight);
+                location.Status = "Available";
+                location.UpdateAt = VietnamTime.Now;
+            }
+        }
     }
 
     public async Task CompleteTeamAsync(Guid staffId, Guid teamId)
@@ -593,8 +703,8 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
             throw new InvalidOperationException("Cannot assign a batch after the classification team has started.");
         if (VietnamTime.Now >= team.Shift.ShiftDate.Date.Add(team.Shift.EndTime))
             throw new InvalidOperationException("Cannot assign a batch to an ended shift.");
-        if (team.Members.Count(x => x.IsActive != false) != 2)
-            throw new InvalidOperationException("Classification team must have exactly two members.");
+        if (team.Members.Count(x => x.IsActive != false) is < 1 or > 2)
+            throw new InvalidOperationException("Classification team must have one or two members.");
         var now = VietnamTime.Now;
         batch.ClassificationTeamId = team.Id;
         batch.ClassificationAssignedAt = now;
@@ -651,6 +761,17 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
         if (destination is null)
             throw new InvalidOperationException($"No staging aisle in {destinationArea.AreaName} has enough capacity.");
 
+        await RemoveBatchFromCurrentAreaAsync(batch);
+        destination.CurrentKg += batch.TotalWeight;
+        destination.UpdateAt = VietnamTime.Now;
+        destinationArea.CurrentKg += batch.TotalWeight;
+        destinationArea.UpdateAt = VietnamTime.Now;
+        batch.CurrentAreaGroupId = destination.Id;
+        batch.CurrentStorageLocationId = null;
+    }
+
+    private async Task RemoveBatchFromCurrentAreaAsync(IntakeBatch batch)
+    {
         if (batch.CurrentAreaGroupId.HasValue)
         {
             if (batch.CurrentStorageLocationId.HasValue)
@@ -677,12 +798,6 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
                 }
             }
         }
-        destination.CurrentKg += batch.TotalWeight;
-        destination.UpdateAt = VietnamTime.Now;
-        destinationArea.CurrentKg += batch.TotalWeight;
-        destinationArea.UpdateAt = VietnamTime.Now;
-        batch.CurrentAreaGroupId = destination.Id;
-        batch.CurrentStorageLocationId = null;
     }
 
     private async Task<IntakeBatch> RequireBatch(Guid id) => await context.IntakeBatches

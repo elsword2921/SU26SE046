@@ -105,6 +105,11 @@ public class ReceivingOperationsController(IReceivingOperationsService service) 
     [Authorize(Roles = "ReceivingStaff")]
     public async Task<IActionResult> MyBatches() => Ok(await service.GetMyBatchesAsync(CurrentUserId));
 
+    [HttpGet("receiving-locations/{locationId:guid}/batches")]
+    [Authorize(Roles = "ReceivingStaff")]
+    public async Task<IActionResult> LocationBatches(Guid locationId)
+        => Ok(await service.GetLocationBatchesAsync(CurrentUserId, locationId));
+
     [HttpGet("my-batches/{batchId:guid}")]
     [Authorize(Roles = "ReceivingStaff")]
     public async Task<IActionResult> MyBatch(Guid batchId)
@@ -114,6 +119,11 @@ public class ReceivingOperationsController(IReceivingOperationsService service) 
     [Authorize(Roles = "ReceivingStaff")]
     public async Task<IActionResult> Start(Guid batchId)
     { await service.StartBatchAsync(CurrentUserId, batchId); return NoContent(); }
+
+    [HttpPost("my-teams/{teamId:guid}/start")]
+    [Authorize(Roles = "ReceivingStaff")]
+    public async Task<IActionResult> StartTeam(Guid teamId)
+    { await service.StartTeamAsync(CurrentUserId, teamId); return NoContent(); }
 
     [HttpPost("my-shifts/{shiftId:guid}/complete")]
     [Authorize(Roles = "ReceivingStaff")]

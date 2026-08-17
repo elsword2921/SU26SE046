@@ -16,15 +16,18 @@ namespace BLL.Services.Implements.DonorRequestService
         private readonly IUnitOfWork _unitOfWork;
         private readonly AppDbContext _context;
         private readonly HttpClient _geocodingClient;
+        private readonly string _geoapifyApiKey;
 
         public DonorRequestService(
             IUnitOfWork unitOfWork,
             AppDbContext context,
-            HttpClient geocodingClient)
+            HttpClient geocodingClient,
+            Microsoft.Extensions.Configuration.IConfiguration configuration)
         {
             _unitOfWork = unitOfWork;
             _context = context;
             _geocodingClient = geocodingClient;
+            _geoapifyApiKey = configuration["Geoapify:ApiKey"]?.Trim() ?? string.Empty;
         }
         public async Task<Guid> CreateAsync(
             Guid donorId,
@@ -36,13 +39,14 @@ namespace BLL.Services.Implements.DonorRequestService
                 "DonorDropOff" => "DonorDropOff",
                 _ => throw new InvalidOperationException("Delivery method must be StaffPickup or DonorDropOff.")
             };
+            var dropOffMethod = deliveryMethod == "DonorDropOff" ? dto.DropOffMethod?.Trim() : null;
             var contactName = dto.ContactName?.Trim();
             var contactPhone = new string((dto.ContactPhoneNumber ?? string.Empty).Where(char.IsDigit).ToArray());
             if (string.IsNullOrWhiteSpace(contactName))
                 throw new InvalidOperationException("Contact name is required.");
             if (contactPhone.Length != 10 || contactPhone[0] != '0')
                 throw new InvalidOperationException("A valid 10-digit Vietnamese contact phone number is required.");
-            if (!dto.PickupDate.HasValue)
+            if (!dto.PickupDate.HasValue && dropOffMethod != "ThirdPartyDelivery")
                 throw new InvalidOperationException("Ngày và giờ tiếp nhận là bắt buộc.");
             if (deliveryMethod == "StaffPickup" && string.IsNullOrWhiteSpace(dto.PickupAddress))
                 throw new InvalidOperationException("Địa chỉ lấy hàng là bắt buộc.");
@@ -51,6 +55,9 @@ namespace BLL.Services.Implements.DonorRequestService
                 throw new InvalidOperationException("Vui lòng chọn một địa chỉ hợp lệ trên bản đồ.");
             if (deliveryMethod == "DonorDropOff" && !dto.WarehouseId.HasValue)
                 throw new InvalidOperationException("Vui lòng chọn kho tiếp nhận.");
+            if (deliveryMethod == "DonorDropOff"
+                && dropOffMethod is not ("SelfDelivery" or "ThirdPartyDelivery"))
+                throw new InvalidOperationException("Vui lòng chọn cách gửi quần áo đến kho.");
             if (dto.PickupDate.HasValue && dto.PickupDate.Value <= VietnamTime.Now)
                 throw new InvalidOperationException("Khung giờ tiếp nhận phải nằm trong tương lai.");
             var warehouse = deliveryMethod == "DonorDropOff"
@@ -61,9 +68,8 @@ namespace BLL.Services.Implements.DonorRequestService
                     dto.PickupLongitude!.Value);
             if (warehouse is null)
                 throw new InvalidOperationException("Kho tiếp nhận không tồn tại hoặc đã ngừng hoạt động.");
-            if (!dto.PickupDate.HasValue)
-                throw new InvalidOperationException("Ngày và khung giờ tiếp nhận là bắt buộc.");
-            await ValidatePickupWindowAsync(warehouse.Id, dto.PickupDate.Value);
+            if (dto.PickupDate.HasValue)
+                await ValidatePickupWindowAsync(warehouse.Id, dto.PickupDate.Value);
 
             var requestId = Guid.NewGuid();
             var now = VietnamTime.Now;
@@ -77,6 +83,11 @@ namespace BLL.Services.Implements.DonorRequestService
                     ContactName = contactName,
                     ContactPhoneNumber = contactPhone,
                     DeliveryMethod = deliveryMethod,
+                    DropOffMethod = dropOffMethod,
+                    CarrierName = dropOffMethod == "ThirdPartyDelivery" && !string.IsNullOrWhiteSpace(dto.CarrierName)
+                        ? dto.CarrierName.Trim() : null,
+                    TrackingCode = dropOffMethod == "ThirdPartyDelivery" && !string.IsNullOrWhiteSpace(dto.TrackingCode)
+                        ? dto.TrackingCode.Trim().ToUpperInvariant() : null,
                     PickupDate = dto.PickupDate.HasValue
                         ? DateTime.SpecifyKind(dto.PickupDate.Value, DateTimeKind.Unspecified)
                         : null,
@@ -235,6 +246,9 @@ namespace BLL.Services.Implements.DonorRequestService
                     DonorName = x.ContactName,
                     PhoneNumber = x.ContactPhoneNumber,
                     DeliveryMethod = x.DeliveryMethod,
+                    DropOffMethod = x.DropOffMethod,
+                    CarrierName = x.CarrierName,
+                    TrackingCode = x.TrackingCode,
                     Description = x.Description,
                     ImageUrls = x.ImageUrls,
                     EstimateWeight = x.EstimateWeight,
@@ -244,9 +258,12 @@ namespace BLL.Services.Implements.DonorRequestService
                     WarehouseId = x.WarehouseId,
                     WarehouseAddress = x.Warehouse.Address,
                     Status = x.Status.ToString(),
-                    StatusText = x.DeliveryMethod == "DonorDropOff"
-                        && x.Status == DonationRequestStatus.PendingStaffAssign
-                            ? "Chờ người quyên góp mang hàng đến kho"
+                    StatusText = x.DropOffMethod == "ThirdPartyDelivery" && x.PickupDate == null
+                        && (x.Status == DonationRequestStatus.PendingStaffAssign
+                            || x.Status == DonationRequestStatus.WaitingReceivingStaff)
+                        ? "Cần cập nhật thông tin vận chuyển"
+                        : x.DeliveryMethod == "DonorDropOff" && x.Status == DonationRequestStatus.PendingStaffAssign
+                            ? "Chờ giao hàng đến kho"
                             : GetStatusText(x.Status),
                     CreatedAt = x.CreateAt,
                     ReceivingTeamName = x.PickupAssignments.Where(a => a.IsActive != false)
@@ -402,23 +419,55 @@ namespace BLL.Services.Implements.DonorRequestService
             if (located.Count == 0)
                 throw new InvalidOperationException(
                     "Không xác định được tọa độ các kho. Manager cần cập nhật địa chỉ kho hợp lệ.");
-            return located.MinBy(x => DistanceKm(
-                latitude, longitude, x.Latitude!.Value, x.Longitude!.Value))!;
+            var inRange = located
+                .Select(x => new
+                {
+                    Warehouse = x,
+                    Distance = DistanceKm(latitude, longitude, x.Latitude!.Value, x.Longitude!.Value)
+                })
+                .Where(x => x.Distance <= x.Warehouse.ServiceRadiusKm)
+                .ToList();
+            if (inRange.Count == 0)
+                throw new InvalidOperationException(
+                    "Địa chỉ này hiện nằm ngoài phạm vi lấy hàng tận nơi của ReThreads. " +
+                    "Vui lòng chọn tự mang đồ đến kho hoặc thay đổi địa chỉ lấy hàng.");
+            return inRange.MinBy(x => x.Distance)!.Warehouse;
         }
 
         private async Task<(double Latitude, double Longitude)?> GeocodeAsync(string address)
         {
-            var url = $"search?format=jsonv2&limit=1&countrycodes=vn&q={Uri.EscapeDataString(address)}";
+            if (string.IsNullOrWhiteSpace(_geoapifyApiKey))
+                throw new InvalidOperationException("Thiếu cấu hình Geoapify:ApiKey để xác định tọa độ kho.");
+            var url = $"v1/geocode/search?text={Uri.EscapeDataString(address)}&filter=countrycode:vn&format=json&lang=vi&limit=1&apiKey={Uri.EscapeDataString(_geoapifyApiKey)}";
             using var response = await _geocodingClient.GetAsync(url);
             if (!response.IsSuccessStatusCode) return null;
             using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-            var first = document.RootElement.EnumerateArray().FirstOrDefault();
-            if (first.ValueKind == JsonValueKind.Undefined) return null;
-            if (!double.TryParse(first.GetProperty("lat").GetString(),
-                    System.Globalization.CultureInfo.InvariantCulture, out var lat)
-                || !double.TryParse(first.GetProperty("lon").GetString(),
-                    System.Globalization.CultureInfo.InvariantCulture, out var lon)) return null;
-            return (lat, lon);
+            if (!document.RootElement.TryGetProperty("results", out var results)
+                || results.GetArrayLength() == 0) return null;
+            var location = results[0];
+            return (location.GetProperty("lat").GetDouble(), location.GetProperty("lon").GetDouble());
+        }
+
+        public async Task UpdateShippingInfoAsync(Guid donorId, Guid requestId, UpdateShippingInfoDto dto)
+        {
+            var request = await _context.DonationRequests.FirstOrDefaultAsync(x =>
+                x.Id == requestId && x.DonorId == donorId && x.IsActive != false)
+                ?? throw new InvalidOperationException("Donation request not found.");
+            if (!CanDonorModify(request.Status) || request.DeliveryMethod != "DonorDropOff"
+                || request.DropOffMethod != "ThirdPartyDelivery")
+                throw new InvalidOperationException("Shipping information cannot be updated for this request.");
+            var carrier = dto.CarrierName?.Trim() ?? string.Empty;
+            var trackingCode = dto.TrackingCode?.Trim().ToUpperInvariant() ?? string.Empty;
+            if (carrier.Length is < 2 or > 100 || trackingCode.Length is < 3 or > 100)
+                throw new InvalidOperationException("Đơn vị vận chuyển hoặc mã vận đơn không hợp lệ.");
+            if (dto.ExpectedArrivalAt <= VietnamTime.Now)
+                throw new InvalidOperationException("Thời gian dự kiến phải nằm trong tương lai.");
+            await ValidatePickupWindowAsync(request.WarehouseId, dto.ExpectedArrivalAt);
+            request.CarrierName = carrier;
+            request.TrackingCode = trackingCode;
+            request.PickupDate = DateTime.SpecifyKind(dto.ExpectedArrivalAt, DateTimeKind.Unspecified);
+            request.UpdateAt = VietnamTime.Now;
+            await _context.SaveChangesAsync();
         }
 
         private static double DistanceKm(double lat1, double lon1, double lat2, double lon2)

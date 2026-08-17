@@ -90,6 +90,13 @@ public class ClassificationOperationsController(IClassificationOperationsService
         return NoContent();
     }
 
+    [HttpPost("grouped-batches/{groupedBatchId:guid}/place")]
+    public async Task<IActionResult> PlaceGroupedBatch(Guid groupedBatchId, PlaceGroupedClassifiedBatchDto dto)
+    {
+        await service.PlaceGroupedBatchAsync(CurrentUserId, groupedBatchId, dto);
+        return NoContent();
+    }
+
     [HttpPost("grouped-batches/send-to-warehouse")]
     public async Task<IActionResult> SendGroupedBatchesToWarehouse(SendGroupedBatchesToWarehouseDto dto) =>
         Ok(await service.SendGroupedBatchesToWarehouseAsync(CurrentUserId, dto.GroupedBatchIds));

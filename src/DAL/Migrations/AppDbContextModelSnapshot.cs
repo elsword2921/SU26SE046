@@ -245,6 +245,9 @@ namespace DAL.Migrations
                     b.Property<Guid?>("SentToWarehouseByStaffId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid?>("StorageLocationId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("Size")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -308,6 +311,8 @@ namespace DAL.Migrations
                     b.HasIndex("RemovedFromClassificationAreaByStaffId");
 
                     b.HasIndex("SentToWarehouseByStaffId");
+
+                    b.HasIndex("StorageLocationId");
 
                     b.HasIndex("StoredByStaffId");
 
@@ -880,6 +885,9 @@ namespace DAL.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("CarrierName")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<DateTime?>("CreateAt")
                         .HasColumnType("datetime2");
 
@@ -894,6 +902,9 @@ namespace DAL.Migrations
 
                     b.Property<string>("DeliveryMethod")
                         .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("DropOffMethod")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Description")
@@ -929,6 +940,9 @@ namespace DAL.Migrations
 
                     b.Property<string>("Status")
                         .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("TrackingCode")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime?>("UpdateAt")
@@ -2533,6 +2547,9 @@ namespace DAL.Migrations
                     b.Property<string>("PhoneNumber")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<double>("ServiceRadiusKm")
+                        .HasColumnType("float");
+
                     b.Property<decimal>("TotalCapacityKg")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
@@ -2688,6 +2705,11 @@ namespace DAL.Migrations
                         .HasForeignKey("GroupId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("DAL.Models.StorageLocation", "StorageLocation")
+                        .WithMany()
+                        .HasForeignKey("StorageLocationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("DAL.Models.User", "PlacedInClassificationAreaByStaff")
                         .WithMany()
                         .HasForeignKey("PlacedInClassificationAreaByStaffId")
@@ -2730,6 +2752,8 @@ namespace DAL.Migrations
                     b.Navigation("SentToWarehouseByStaff");
 
                     b.Navigation("StoredByStaff");
+
+                    b.Navigation("StorageLocation");
 
                     b.Navigation("Warehouse");
 
