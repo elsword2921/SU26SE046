@@ -39,9 +39,112 @@ jobs:
           name: .net-app
           path: ${{ env.PUBLISH_PATH }}
 
+  migrate-database:
+    name: Apply EF Core migrations to Azure SQL
+    runs-on: ubuntu-latest
+    needs: build
+    timeout-minutes: 15
+    permissions:
+      id-token: write
+      contents: read
+    concurrency:
+      group: rethreads-production-database-migration
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+
+      - name: Restore dependencies
+        run: dotnet restore "${{ env.API_PROJECT }}"
+
+      - name: Install EF Core CLI
+        shell: bash
+        run: dotnet tool install --tool-path "${{ runner.temp }}/dotnet-tools" dotnet-ef --version 10.0.8
+
+      - name: Check migration/model consistency
+        shell: bash
+        run: |
+          "${{ runner.temp }}/dotnet-tools/dotnet-ef" migrations has-pending-model-changes \
+            --project src/DAL/DAL.csproj \
+            --startup-project "${{ env.API_PROJECT }}" \
+            --configuration Release
+
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_766B4CAC597A4149979FCD43643ADC2F }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_7B17F91DDD814C2582466E234F534F6B }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_3AD6F6082CF64C94B7596361E9F1D9C0 }}
+
+      - name: Resolve Azure SQL server and temporarily allow runner IP
+        id: sql-firewall
+        shell: bash
+        env:
+          AZURE_SQL_CONNECTION_STRING: ${{ secrets.AZURE_SQL_CONNECTION_STRING }}
+        run: |
+          set -euo pipefail
+          server_host="$(printf '%s' "$AZURE_SQL_CONNECTION_STRING" | sed -nE 's/.*(Server|Data Source)=tcp:([^,;]+).*/\2/ip')"
+          if [[ -z "$server_host" ]]; then
+            echo "Cannot determine Azure SQL server from AZURE_SQL_CONNECTION_STRING."
+            exit 1
+          fi
+
+          sql_server_name="${server_host%%.*}"
+          sql_resource_group="$(az sql server list \
+            --query "[?name=='$sql_server_name'].resourceGroup | [0]" --output tsv)"
+          if [[ -z "$sql_resource_group" ]]; then
+            echo "Azure SQL server '$sql_server_name' was not found in the current subscription."
+            exit 1
+          fi
+
+          runner_ip="$(curl --fail --silent --show-error https://api.ipify.org)"
+          firewall_rule="github-migration-${{ github.run_id }}-${{ github.run_attempt }}"
+          az sql server firewall-rule create \
+            --resource-group "$sql_resource_group" \
+            --server "$sql_server_name" \
+            --name "$firewall_rule" \
+            --start-ip-address "$runner_ip" \
+            --end-ip-address "$runner_ip" \
+            --output none
+
+          echo "SQL_SERVER_NAME=$sql_server_name" >> "$GITHUB_ENV"
+          echo "SQL_RESOURCE_GROUP=$sql_resource_group" >> "$GITHUB_ENV"
+          echo "SQL_FIREWALL_RULE=$firewall_rule" >> "$GITHUB_ENV"
+
+      - name: Apply pending migrations
+        shell: bash
+        env:
+          AZURE_SQL_CONNECTION_STRING: ${{ secrets.AZURE_SQL_CONNECTION_STRING }}
+        run: |
+          "${{ runner.temp }}/dotnet-tools/dotnet-ef" database update \
+            --project src/DAL/DAL.csproj \
+            --startup-project "${{ env.API_PROJECT }}" \
+            --configuration Release \
+            --no-build \
+            --connection "$AZURE_SQL_CONNECTION_STRING"
+
+      - name: Remove temporary Azure SQL firewall rule
+        if: ${{ always() && env.SQL_FIREWALL_RULE != '' }}
+        shell: bash
+        run: |
+          az sql server firewall-rule delete \
+            --resource-group "$SQL_RESOURCE_GROUP" \
+            --server "$SQL_SERVER_NAME" \
+            --name "$SQL_FIREWALL_RULE" \
+            --yes \
+            --output none || true
+
   deploy:
     runs-on: windows-latest
-    needs: build
+    needs:
+      - build
+      - migrate-database
     permissions:
       id-token: write #This is required for requesting the JWT
       contents: read #This is required for actions/checkout
