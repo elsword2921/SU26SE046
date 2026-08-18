@@ -3,10 +3,6 @@
 
 name: Build and deploy ASP.Net Core app to Azure Web App - ReThreads
 
-env:
-  API_PROJECT: src/Capstone-API/Capstone-API.csproj
-  PUBLISH_PATH: ${{ github.workspace }}/publish
-
 on:
   push:
     branches:
@@ -28,16 +24,16 @@ jobs:
           dotnet-version: '10.x'
 
       - name: Build with dotnet
-        run: dotnet build "${{ env.API_PROJECT }}" --configuration Release
+        run: dotnet build --configuration Release
 
       - name: dotnet publish
-        run: dotnet publish "${{ env.API_PROJECT }}" --configuration Release --no-build --output "${{ env.PUBLISH_PATH }}"
+        run: dotnet publish -c Release -o "${{env.DOTNET_ROOT}}/myapp"
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
           name: .net-app
-          path: ${{ env.PUBLISH_PATH }}
+          path: ${{env.DOTNET_ROOT}}/myapp
 
   deploy:
     runs-on: windows-latest
@@ -55,9 +51,9 @@ jobs:
       - name: Login to Azure
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_766B4CAC597A4149979FCD43643ADC2F }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_7B17F91DDD814C2582466E234F534F6B }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_3AD6F6082CF64C94B7596361E9F1D9C0 }}
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_F732A2EBCA3840F8B3D6AE6B947643C2 }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_A7B760DD8E0343D5856566F8DEC86E86 }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_CDE456A1E5B74FA4A02475A9EEAB8E61 }}
 
       - name: Deploy to Azure Web App
         id: deploy-to-webapp
