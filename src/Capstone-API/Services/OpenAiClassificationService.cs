@@ -93,8 +93,12 @@ public class GeminiClassificationService(HttpClient httpClient, IConfiguration c
                 $"  - {o.Id}: Label {o.Grade} - {o.Text}"))));
         return $$"""
             You are assisting a used-clothing classification staff member. Inspect all supplied photos
-            as views of the same item. Choose exactly one ID from every allowed list and one answer ID
-            for every question. Never invent IDs. Be conservative: photos may not reliably show fabric,
+            as views of the same item. First decide whether the main item is clothing. Shoes, bags,
+            accessories, household objects, people without a clearly presented garment, and unrelated
+            objects are not clothing. If it is not clothing, set isClothing to false, all category IDs
+            to null, answers to an empty array, and briefly explain in Vietnamese. Do not classify it.
+            If it is clothing, set isClothing to true, choose exactly one ID from every allowed list and
+            one answer ID for every question. Never invent IDs. Be conservative: photos may not reliably show fabric,
             size, gender, or small defects. Pick the closest visible option, lower confidence when uncertain,
             and briefly explain uncertainty in Vietnamese. Clothing type must belong to the selected garment group.
 
@@ -119,7 +123,10 @@ public class GeminiClassificationService(HttpClient httpClient, IConfiguration c
     {
         static JsonArray Ids<T>(IEnumerable<T> values, Func<T, Guid> select) =>
             new(values.Select(x => (JsonNode?)select(x).ToString()).ToArray());
-        JsonObject IdProperty(JsonArray ids) => new() { ["type"] = "string", ["enum"] = ids };
+        JsonObject IdProperty(JsonArray ids, bool nullable = false) => new()
+        {
+            ["type"] = "string", ["enum"] = ids, ["nullable"] = nullable
+        };
         var answerItems = new JsonObject
         {
             ["type"] = "object", ["additionalProperties"] = false,
@@ -135,29 +142,36 @@ public class GeminiClassificationService(HttpClient httpClient, IConfiguration c
             ["type"] = "object", ["additionalProperties"] = false,
             ["properties"] = new JsonObject
             {
-                ["fabricTypeId"] = IdProperty(Ids(catalog.FabricTypes, x => x.Id)),
-                ["garmentGroupId"] = IdProperty(Ids(catalog.GarmentGroups, x => x.Id)),
-                ["clothingTypeId"] = IdProperty(Ids(catalog.ClothingTypes, x => x.Id)),
-                ["genderId"] = IdProperty(Ids(catalog.Genders, x => x.Id)),
-                ["targetUserId"] = IdProperty(Ids(catalog.TargetUsers, x => x.Id)),
-                ["sizeId"] = IdProperty(Ids(catalog.Sizes, x => x.Id)),
+                ["isClothing"] = new JsonObject { ["type"] = "boolean" },
+                ["fabricTypeId"] = IdProperty(Ids(catalog.FabricTypes, x => x.Id), true),
+                ["garmentGroupId"] = IdProperty(Ids(catalog.GarmentGroups, x => x.Id), true),
+                ["clothingTypeId"] = IdProperty(Ids(catalog.ClothingTypes, x => x.Id), true),
+                ["genderId"] = IdProperty(Ids(catalog.Genders, x => x.Id), true),
+                ["targetUserId"] = IdProperty(Ids(catalog.TargetUsers, x => x.Id), true),
+                ["sizeId"] = IdProperty(Ids(catalog.Sizes, x => x.Id), true),
                 ["answers"] = new JsonObject { ["type"] = "array", ["items"] = answerItems },
                 ["confidence"] = new JsonObject { ["type"] = "number", ["minimum"] = 0, ["maximum"] = 1 },
                 ["summary"] = new JsonObject { ["type"] = "string" }
             },
-            ["required"] = new JsonArray("fabricTypeId", "garmentGroupId", "clothingTypeId",
+            ["required"] = new JsonArray("isClothing", "fabricTypeId", "garmentGroupId", "clothingTypeId",
                 "genderId", "targetUserId", "sizeId", "answers", "confidence", "summary")
         };
     }
 
     private static AiClassificationSuggestionDto ValidateAndMap(ClassificationCatalogDto c, AiResponse ai)
     {
+        if (!ai.IsClothing)
+            return new(false, null, null, null, null, null, null, [],
+                Math.Clamp(ai.Confidence, 0, 1), ai.Summary.Trim());
+
         static bool Has(IEnumerable<CategoryOptionDto> xs, Guid id) => xs.Any(x => x.Id == id);
-        if (!Has(c.FabricTypes, ai.FabricTypeId) || !Has(c.GarmentGroups, ai.GarmentGroupId)
-            || !Has(c.Genders, ai.GenderId) || !Has(c.TargetUsers, ai.TargetUserId)
-            || !Has(c.Sizes, ai.SizeId))
+        if (!ai.FabricTypeId.HasValue || !ai.GarmentGroupId.HasValue || !ai.ClothingTypeId.HasValue
+            || !ai.GenderId.HasValue || !ai.TargetUserId.HasValue || !ai.SizeId.HasValue
+            || !Has(c.FabricTypes, ai.FabricTypeId.Value) || !Has(c.GarmentGroups, ai.GarmentGroupId.Value)
+            || !Has(c.Genders, ai.GenderId.Value) || !Has(c.TargetUsers, ai.TargetUserId.Value)
+            || !Has(c.Sizes, ai.SizeId.Value))
             throw new InvalidOperationException("AI selected an option outside the current catalog.");
-        var clothing = c.ClothingTypes.FirstOrDefault(x => x.Id == ai.ClothingTypeId);
+        var clothing = c.ClothingTypes.FirstOrDefault(x => x.Id == ai.ClothingTypeId.Value);
         if (clothing is null || clothing.ParentId != ai.GarmentGroupId)
             throw new InvalidOperationException("AI selected an invalid clothing type for the garment group.");
         var answers = ai.Answers.GroupBy(x => x.QuestionId).Select(x => x.Last()).ToList();
@@ -165,7 +179,7 @@ public class GeminiClassificationService(HttpClient httpClient, IConfiguration c
                 answers.All(a => a.QuestionId != q.Id)
                 || answers.Any(a => a.QuestionId == q.Id && q.Options.All(o => o.Id != a.AnswerId))))
             throw new InvalidOperationException("AI did not answer the current condition questionnaire correctly.");
-        return new(ai.FabricTypeId, ai.GarmentGroupId, ai.ClothingTypeId, ai.GenderId,
+        return new(true, ai.FabricTypeId, ai.GarmentGroupId, ai.ClothingTypeId, ai.GenderId,
             ai.TargetUserId, ai.SizeId, answers, Math.Clamp(ai.Confidence, 0, 1), ai.Summary.Trim());
     }
 
@@ -182,12 +196,13 @@ public class GeminiClassificationService(HttpClient httpClient, IConfiguration c
 
     private sealed class AiResponse
     {
-        public Guid FabricTypeId { get; set; }
-        public Guid GarmentGroupId { get; set; }
-        public Guid ClothingTypeId { get; set; }
-        public Guid GenderId { get; set; }
-        public Guid TargetUserId { get; set; }
-        public Guid SizeId { get; set; }
+        public bool IsClothing { get; set; }
+        public Guid? FabricTypeId { get; set; }
+        public Guid? GarmentGroupId { get; set; }
+        public Guid? ClothingTypeId { get; set; }
+        public Guid? GenderId { get; set; }
+        public Guid? TargetUserId { get; set; }
+        public Guid? SizeId { get; set; }
         public List<ClassificationAnswerDto> Answers { get; set; } = [];
         public double Confidence { get; set; }
         public string Summary { get; set; } = "";

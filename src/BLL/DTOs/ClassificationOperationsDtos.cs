@@ -58,8 +58,8 @@ public class AnalyzeClassificationImagesDto
     public List<string> ImageDataUrls { get; set; } = [];
 }
 
-public record AiClassificationSuggestionDto(Guid FabricTypeId, Guid GarmentGroupId,
-    Guid ClothingTypeId, Guid GenderId, Guid TargetUserId, Guid SizeId,
+public record AiClassificationSuggestionDto(bool IsClothing, Guid? FabricTypeId, Guid? GarmentGroupId,
+    Guid? ClothingTypeId, Guid? GenderId, Guid? TargetUserId, Guid? SizeId,
     IReadOnlyList<ClassificationAnswerDto> Answers, double Confidence, string Summary);
 
 public record GroupedClassifiedBatchDto(Guid Id, string BatchCode, DateTime ClassificationDate,
