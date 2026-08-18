@@ -1587,10 +1587,22 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
             throw new InvalidOperationException("The intake batch must have a valid location in the warehouse receiving area.");
         if (!batch.IntakeBatchDonationRequests.Any())
             throw new InvalidOperationException("The intake batch does not contain any received donation request.");
+        var area = batch.CurrentArea!;
+        var group = batch.CurrentAreaGroup!;
+        var location = batch.CurrentStorageLocation!;
         batch.Status = "AwaitingClassificationAssignment";
         batch.SentToClassificationAt = VietnamTime.Now;
         batch.UpdateAt = VietnamTime.Now;
         batch.UpdatedBy = staffId;
+        area.CurrentKg = Math.Max(0, area.CurrentKg - batch.TotalWeight);
+        area.UpdateAt = VietnamTime.Now;
+        group.CurrentKg = Math.Max(0, group.CurrentKg - batch.TotalWeight);
+        group.UpdateAt = VietnamTime.Now;
+        location.CurrentWeightKg = Math.Max(0, location.CurrentWeightKg - batch.TotalWeight);
+        location.UpdateAt = VietnamTime.Now;
+        batch.CurrentAreaId = null;
+        batch.CurrentAreaGroupId = null;
+        batch.CurrentStorageLocationId = null;
         await NotificationWriter.NotifyDonorsAsync(context,
             batch.IntakeBatchDonationRequests.Select(x => x.DonationRequestId),
             "SentToClassification", "Đã chuyển sang phân loại",
