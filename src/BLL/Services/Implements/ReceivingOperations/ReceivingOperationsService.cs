@@ -1452,6 +1452,11 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
         assignment.DonorRequest.PickupDate = dto.PickupDate; assignment.DonorRequest.Status = DonationRequestStatus.WaitingReceivingStaff;
         assignment.DonorRequest.UpdateAt = DateTime.UtcNow;
         CompleteBatchWhenAllRequestsProcessed(batch);
+        var actor = await NotificationWriter.ActorNameAsync(context, staffId);
+        var reason = string.IsNullOrWhiteSpace(dto.Reason) ? "" : $" Lý do: {dto.Reason.Trim()}";
+        NotificationWriter.NotifyDonor(context, assignment.DonorRequest, "PickupRescheduled",
+            "Lịch tiếp nhận đã thay đổi",
+            $"được {actor} hẹn lại vào {dto.PickupDate:HH:mm dd/MM/yyyy}.{reason}", staffId);
         await context.SaveChangesAsync();
     }
 
