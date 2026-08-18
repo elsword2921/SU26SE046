@@ -1,4 +1,5 @@
 using BLL.Common;
+using BLL.Services.Implements.Notifications;
 using BLL.DTOs;
 using DAL;
 using DAL.Models;
@@ -107,6 +108,11 @@ public class DonationChatController(AppDbContext context, IHubContext<DonationCh
         var recipientIds = sender.Role.RoleName == "Donor"
             ? request.ReceivingStaffIds
             : [request.DonorId];
+        foreach (var recipientId in recipientIds)
+            NotificationWriter.NotifyUser(context, recipientId, "DonationChatMessage",
+                $"Tin nhắn mới từ {sender.FullName}", $"Đơn {request.Code}: {entity.Message}",
+                $"/my-orders?requestId={requestId}", CurrentUserId);
+        await context.SaveChangesAsync();
         var participantLabel = sender.Role.RoleName == "Donor" ? request.DonorName : sender.FullName;
         var notification = new
         {

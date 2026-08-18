@@ -113,6 +113,7 @@ namespace DAL
             modelBuilder.Entity<User>().HasIndex(x => x.PhoneNumber);
             modelBuilder.Entity<UserVerificationCode>()
                 .HasIndex(x => new { x.UserId, x.IsActive });
+            modelBuilder.Entity<UserVerificationCode>().Property(x => x.Purpose).HasMaxLength(32);
             modelBuilder.Entity<UserVerificationCode>()
                 .HasOne(x => x.User)
                 .WithMany(x => x.VerificationCodes)

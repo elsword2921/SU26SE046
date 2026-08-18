@@ -76,7 +76,11 @@ public record GroupedClassifiedBatchDetailDto(Guid Id, string BatchCode, DateTim
 
 public record SendGroupedBatchesToWarehouseDto(IReadOnlyList<Guid> GroupedBatchIds);
 public record SendGroupedBatchesToWarehouseResultDto(int Sent, int Skipped);
-public record PlaceGroupedClassifiedBatchDto(Guid AreaId, Guid GroupId, Guid StorageLocationId);
+public record PlaceGroupedClassifiedBatchDto(
+    Guid AreaId,
+    Guid GroupId,
+    Guid StorageLocationId,
+    decimal ActualWeightKg);
 
 public record ClassificationAreaLayoutDto(Guid WarehouseId, string WarehouseName,
     IReadOnlyList<ClassificationAreaDto> Areas, IReadOnlyList<GroupedClassifiedBatchDto> UnassignedBatches);

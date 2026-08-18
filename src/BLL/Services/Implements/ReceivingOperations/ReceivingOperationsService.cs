@@ -1006,6 +1006,8 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
     public async Task<List<ManagerShiftOverviewDto>> GetManagerShiftsAsync(
         Guid? warehouseId = null, DateTime? fromDate = null, DateTime? toDate = null)
     {
+        await ShiftLifecycle.CompleteEndedShiftsAsync(context);
+
         var shiftQuery = context.Shifts.AsNoTracking()
             .Include(x => x.Warehouse)
             .Include(x => x.Teams.Where(t => t.IsActive != false

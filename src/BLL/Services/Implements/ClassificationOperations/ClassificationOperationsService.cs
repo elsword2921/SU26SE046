@@ -561,6 +561,9 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
             throw new InvalidOperationException("Only an open classified batch can be placed.");
         if (batch.PlacedInClassificationAreaAt.HasValue)
             throw new InvalidOperationException("Classified batch has already been placed.");
+        if (dto.ActualWeightKg <= 0)
+            throw new InvalidOperationException("Actual weight must be greater than zero.");
+        var actualWeightKg = decimal.Round(dto.ActualWeightKg, 2, MidpointRounding.AwayFromZero);
 
         var area = await context.WarehouseAreas.FirstOrDefaultAsync(x => x.Id == dto.AreaId
             && x.WarehouseId == batch.WarehouseId && x.AreaType == "Classified" && x.IsActive != false)
@@ -572,9 +575,9 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
             x.Id == dto.StorageLocationId && x.WarehouseId == batch.WarehouseId
             && x.AreaId == area.Id && x.AreaGroupId == group.Id && x.IsActive != false)
             ?? throw new InvalidOperationException("Storage location does not belong to the selected aisle.");
-        if (group.CurrentKg + batch.TotalWeight > group.CapacityKg
-            || area.CurrentKg + batch.TotalWeight > area.CapacityKg
-            || location.CurrentWeightKg + batch.TotalWeight > location.CapacityKg)
+        if (group.CurrentKg + actualWeightKg > group.CapacityKg
+            || area.CurrentKg + actualWeightKg > area.CapacityKg
+            || location.CurrentWeightKg + actualWeightKg > location.CapacityKg)
             throw new InvalidOperationException("The selected area, aisle, or storage location does not have enough capacity.");
 
         var placedAt = VietnamTime.Now;
@@ -584,13 +587,14 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
         batch.ClassificationAreaName = area.AreaName;
         batch.PlacedInClassificationAreaAt = placedAt;
         batch.PlacedInClassificationAreaByStaffId = staffId;
+        batch.TotalWeight = actualWeightKg;
         batch.UpdateAt = placedAt;
         batch.UpdatedBy = staffId;
-        group.CurrentKg += batch.TotalWeight;
+        group.CurrentKg += actualWeightKg;
         group.UpdateAt = placedAt;
-        area.CurrentKg += batch.TotalWeight;
+        area.CurrentKg += actualWeightKg;
         area.UpdateAt = placedAt;
-        location.CurrentWeightKg += batch.TotalWeight;
+        location.CurrentWeightKg += actualWeightKg;
         location.Status = location.CurrentWeightKg >= location.CapacityKg ? "Full" : "Available";
         location.UpdateAt = placedAt;
         await context.SaveChangesAsync();
@@ -648,6 +652,8 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
     public async Task<ClassificationManagementBoardDto> GetManagementBoardAsync(
         Guid? warehouseId, DateTime? date)
     {
+        await ShiftLifecycle.CompleteEndedShiftsAsync(context);
+
         var warehouses = await context.Warehouses.AsNoTracking().Where(x => x.IsActive != false)
             .OrderBy(x => x.WarehouseName)
             .Select(x => new ManagerWarehouseOptionDto(x.Id, x.WarehouseName, x.Address)).ToListAsync();

@@ -40,6 +40,14 @@ namespace Capstone_API.Controllers
             return await _authService.LoginAsync(request);
         }
 
+        [HttpPost("forgot-password")]
+        public async Task<ForgotPasswordResponse> ForgotPassword(ForgotPasswordRequest request) =>
+            await _authService.ForgotPasswordAsync(request);
+
+        [HttpPost("reset-password")]
+        public async Task<ResetPasswordResponse> ResetPassword(ResetPasswordRequest request) =>
+            await _authService.ResetPasswordAsync(request);
+
         [Authorize]
         [HttpGet("me")]
         public async Task<CurrentUserProfileDto> Me()

@@ -20,6 +20,8 @@ public partial class AuthService(
     IUnitOfWork unitOfWork, AppDbContext dbContext, IConfiguration configuration,
     IEmailVerificationSender emailSender) : IAuthService
 {
+    private const string RegistrationPurpose = "Registration";
+    private const string PasswordResetPurpose = "PasswordReset";
 
     public async Task<CurrentUserProfileDto> GetCurrentUserProfileAsync(Guid userId)
     {
@@ -88,7 +90,7 @@ public partial class AuthService(
             IsActive = false, CreateAt = VietnamTime.Now
         };
         dbContext.Users.Add(user);
-        var code = CreateCode(user.Id);
+        var code = CreateCode(user.Id, RegistrationPurpose);
         await dbContext.SaveChangesAsync();
         try
         {
@@ -109,7 +111,7 @@ public partial class AuthService(
         var user = await dbContext.Users.FindAsync(request.UserId)
             ?? throw new InvalidOperationException("Account was not found.");
         var verification = await dbContext.UserVerificationCodes
-            .Where(x => x.UserId == request.UserId && x.IsActive == true)
+            .Where(x => x.UserId == request.UserId && x.Purpose == RegistrationPurpose && x.IsActive == true)
             .OrderByDescending(x => x.CreateAt).FirstOrDefaultAsync()
             ?? throw new InvalidOperationException("No active verification code was found.");
         if (verification.ExpiresAt <= VietnamTime.Now)
@@ -143,23 +145,86 @@ public partial class AuthService(
         if (user.EmailConfirmed)
             throw new InvalidOperationException("Email is already verified.");
         var latest = await dbContext.UserVerificationCodes.Where(x => x.UserId == request.UserId)
+            .Where(x => x.Purpose == RegistrationPurpose)
             .OrderByDescending(x => x.CreateAt).FirstOrDefaultAsync();
         if (latest?.CreateAt > VietnamTime.Now.AddMinutes(-1))
             throw new InvalidOperationException("Please wait one minute before requesting another code.");
         await dbContext.UserVerificationCodes
-            .Where(x => x.UserId == request.UserId && x.IsActive == true)
+            .Where(x => x.UserId == request.UserId && x.Purpose == RegistrationPurpose && x.IsActive == true)
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsActive, false));
-        var code = CreateCode(user.Id);
+        var code = CreateCode(user.Id, RegistrationPurpose);
         await dbContext.SaveChangesAsync();
         await emailSender.SendAsync(user.Email, user.FullName, code);
     }
 
-    private string CreateCode(Guid userId)
+    public async Task<ForgotPasswordResponse> ForgotPasswordAsync(ForgotPasswordRequest request)
+    {
+        var email = (request.Email ?? string.Empty).Trim().ToLowerInvariant();
+        const string message = "If the email belongs to an active account, a password reset code has been sent.";
+        if (!EmailRegex().IsMatch(email) || email.Length > 254)
+            return new ForgotPasswordResponse(message);
+
+        var user = await dbContext.Users.SingleOrDefaultAsync(x =>
+            x.Email.ToLower() == email && x.EmailConfirmed && x.IsActive == true && x.UserStatus == "Active");
+        if (user is null) return new ForgotPasswordResponse(message);
+
+        var latest = await dbContext.UserVerificationCodes
+            .Where(x => x.UserId == user.Id && x.Purpose == PasswordResetPurpose)
+            .OrderByDescending(x => x.CreateAt).FirstOrDefaultAsync();
+        if (latest?.CreateAt > VietnamTime.Now.AddMinutes(-1))
+            return new ForgotPasswordResponse(message);
+
+        await dbContext.UserVerificationCodes
+            .Where(x => x.UserId == user.Id && x.Purpose == PasswordResetPurpose && x.IsActive == true)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.IsActive, false));
+        var code = CreateCode(user.Id, PasswordResetPurpose);
+        await dbContext.SaveChangesAsync();
+        await emailSender.SendPasswordResetAsync(user.Email, user.FullName, code);
+        return new ForgotPasswordResponse(message);
+    }
+
+    public async Task<ResetPasswordResponse> ResetPasswordAsync(ResetPasswordRequest request)
+    {
+        var email = (request.Email ?? string.Empty).Trim().ToLowerInvariant();
+        var code = request.Code ?? string.Empty;
+        if (!EmailRegex().IsMatch(email) || !SixDigitCodeRegex().IsMatch(code))
+            throw new InvalidOperationException("Email or verification code is invalid.");
+        ValidatePassword(request.NewPassword);
+
+        var user = await dbContext.Users.SingleOrDefaultAsync(x =>
+            x.Email.ToLower() == email && x.EmailConfirmed && x.IsActive == true && x.UserStatus == "Active")
+            ?? throw new InvalidOperationException("Email or verification code is invalid.");
+        var verification = await dbContext.UserVerificationCodes
+            .Where(x => x.UserId == user.Id && x.Purpose == PasswordResetPurpose && x.IsActive == true)
+            .OrderByDescending(x => x.CreateAt).FirstOrDefaultAsync()
+            ?? throw new InvalidOperationException("Email or verification code is invalid.");
+        if (verification.ExpiresAt <= VietnamTime.Now)
+            throw new InvalidOperationException("Verification code has expired. Please request a new code.");
+        if (verification.FailedAttempts >= 5)
+            throw new InvalidOperationException("Too many failed attempts. Please request a new code.");
+        if (!CryptographicOperations.FixedTimeEquals(
+                Convert.FromHexString(verification.CodeHash),
+                Convert.FromHexString(HashCode(code))))
+        {
+            verification.FailedAttempts++;
+            await dbContext.SaveChangesAsync();
+            throw new InvalidOperationException("Email or verification code is invalid.");
+        }
+
+        verification.VerifiedAt = VietnamTime.Now;
+        verification.IsActive = false;
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+        user.UpdateAt = VietnamTime.Now;
+        await dbContext.SaveChangesAsync();
+        return new ResetPasswordResponse("Password reset successfully. You can now sign in with your new password.");
+    }
+
+    private string CreateCode(Guid userId, string purpose)
     {
         var code = RandomNumberGenerator.GetInt32(1_000_000).ToString("D6");
         dbContext.UserVerificationCodes.Add(new UserVerificationCode
         {
-            UserId = userId, CodeHash = HashCode(code),
+            UserId = userId, CodeHash = HashCode(code), Purpose = purpose,
             ExpiresAt = VietnamTime.Now.AddMinutes(5), CreateAt = VietnamTime.Now, IsActive = true
         });
         return code;
@@ -179,8 +244,13 @@ public partial class AuthService(
             throw new InvalidOperationException("Phone number must be a valid Vietnamese mobile number.");
         if (r.PhoneNumber.StartsWith("+84")) r.PhoneNumber = "0" + r.PhoneNumber[3..];
         if (r.FullName.Length is < 2 or > 100) throw new InvalidOperationException("Full name must contain 2-100 characters.");
-        if (r.Password.Length < 8 || !r.Password.Any(char.IsUpper) || !r.Password.Any(char.IsDigit) ||
-            r.Password.All(char.IsLetterOrDigit))
+        ValidatePassword(r.Password);
+    }
+
+    private static void ValidatePassword(string password)
+    {
+        if (string.IsNullOrEmpty(password) || password.Length < 8 || !password.Any(char.IsUpper) ||
+            !password.Any(char.IsDigit) || password.All(char.IsLetterOrDigit))
             throw new InvalidOperationException("Password must be at least 8 characters and include an uppercase letter, a number and a special character.");
     }
 

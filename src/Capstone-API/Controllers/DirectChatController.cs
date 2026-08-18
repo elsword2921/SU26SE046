@@ -1,4 +1,5 @@
 using BLL.Common;
+using BLL.Services.Implements.Notifications;
 using BLL.DTOs;
 using Capstone_API.Hubs;
 using DAL;
@@ -62,7 +63,10 @@ public class DirectChatController(AppDbContext context, IHubContext<DonationChat
         var sender = await context.Users.AsNoTracking().Include(x => x.Role).FirstAsync(x => x.Id == UserId);
         var entity = new DirectChatMessage { Id = Guid.NewGuid(), SenderId = UserId, RecipientId = otherUserId,
             Message = text, SentAt = VietnamTime.Now, CreateAt = VietnamTime.Now, IsActive = true };
-        context.DirectChatMessages.Add(entity); await context.SaveChangesAsync();
+        context.DirectChatMessages.Add(entity);
+        NotificationWriter.NotifyUser(context, otherUserId, "DirectChatMessage",
+            $"Tin nhắn mới từ {sender.FullName}", text, "/messages", UserId);
+        await context.SaveChangesAsync();
         var result = new DonationChatMessageDto(entity.Id, UserId, sender.FullName, sender.Role.RoleName,
             entity.Message, entity.SentAt, true);
         await hub.Clients.Group(DonationChatHub.UserGroupName(otherUserId)).SendAsync("ChatNotification", new

@@ -12,6 +12,48 @@ public class EmailVerificationSender(
     IConfiguration configuration,
     ILogger<EmailVerificationSender> logger) : IEmailVerificationSender
 {
+    public async Task SendPasswordResetAsync(string email, string recipientName, string code)
+    {
+        if (!bool.TryParse(configuration["Notifications:Email:Enabled"], out var enabled) || !enabled)
+        {
+            logger.LogWarning("DEV PASSWORD RESET OTP for {Email}: {Code}", email, code);
+            return;
+        }
+
+        using var client = CreateClient();
+        var safeName = WebUtility.HtmlEncode(recipientName);
+        var safeCode = WebUtility.HtmlEncode(code);
+        using var message = new MailMessage
+        {
+            From = new MailAddress(configuration["Notifications:Email:From"]!, "ReThreads", Encoding.UTF8),
+            Subject = "ReThreads - Đặt lại mật khẩu",
+            SubjectEncoding = Encoding.UTF8,
+            BodyEncoding = Encoding.UTF8,
+            IsBodyHtml = true,
+            Body = $"""
+                <div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;padding:32px;color:#10231d">
+                  <h1 style="color:#087d5e">Đặt lại mật khẩu ReThreads</h1>
+                  <p>Xin chào {safeName},</p>
+                  <p>Dùng mã dưới đây để đặt lại mật khẩu. Mã có hiệu lực trong 5 phút.</p>
+                  <div style="margin:24px 0;padding:20px;text-align:center;background:#f0fcf8;border:1px dashed #13b987;border-radius:14px;font-size:36px;font-weight:800;letter-spacing:8px;color:#087d5e">{safeCode}</div>
+                  <p>Nếu bạn không yêu cầu đặt lại mật khẩu, hãy bỏ qua email này và không chia sẻ mã cho bất kỳ ai.</p>
+                </div>
+                """
+        };
+        message.To.Add(email);
+        await client.SendMailAsync(message);
+    }
+
+    private SmtpClient CreateClient() => new(
+        configuration["Notifications:Email:Host"],
+        int.TryParse(configuration["Notifications:Email:Port"], out var port) ? port : 587)
+    {
+        EnableSsl = bool.TryParse(configuration["Notifications:Email:UseSsl"], out var ssl) && ssl,
+        Credentials = new NetworkCredential(
+            configuration["Notifications:Email:Username"],
+            configuration["Notifications:Email:Password"])
+    };
+
     public async Task SendAsync(string email, string recipientName, string code)
     {
         if (!bool.TryParse(configuration["Notifications:Email:Enabled"], out var enabled) || !enabled)
