@@ -104,4 +104,19 @@ namespace BLL.DTOs
         public int PointsSpent { get; set; }
         public DateTime RedeemedAt { get; set; }
     }
+
+    public class DonationPointTransactionDto
+    {
+        public Guid Id { get; set; }
+        public string Type { get; set; } = string.Empty;
+        public int Points { get; set; }
+        public int BalanceAfter { get; set; }
+        public decimal? WeightKg { get; set; }
+        public string Description { get; set; } = string.Empty;
+        public string? DonationRequestCode { get; set; }
+        public DateTime OccurredAt { get; set; }
+    }
+
+    public record DonationPointSummaryDto(int DonationPoint, int PointsPerKg,
+        List<DonationPointTransactionDto> Transactions);
 }

@@ -3,6 +3,7 @@ using BLL.DTOs;
 using BLL.Common;
 using BLL.Services.Interfaces.ReceivingOperations;
 using BLL.Services.Implements.Notifications;
+using BLL.Services.Implements.Voucher;
 using DAL;
 using DAL.Models;
 using DAL.Models.Enum;
@@ -1287,9 +1288,15 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
         assignment.DonorRequest.ImageUrls = dto.ImageUrls ?? assignment.DonorRequest.ImageUrls;
         assignment.DonorRequest.Status = DonationRequestStatus.Confirmed; assignment.DonorRequest.UpdateAt = DateTime.UtcNow;
         batch.TotalWeight += dto.ActualWeight; batch.UpdateAt = DateTime.UtcNow;
+        var awardedPoints = await DonationPointWriter.AwardDonationAsync(
+            context, assignment.DonorRequest, dto.ActualWeight, staffId);
         var actor = await NotificationWriter.ActorNameAsync(context, staffId);
         NotificationWriter.NotifyDonor(context, assignment.DonorRequest, "DonationReceived", "Đã tiếp nhận đồ quyên góp",
             $"được {actor} tiếp nhận lúc {NotificationWriter.FormatTime(DateTime.UtcNow)}, khối lượng {dto.ActualWeight:0.##} kg.", staffId);
+        if (awardedPoints > 0)
+            NotificationWriter.NotifyDonor(context, assignment.DonorRequest, "DonationPointsAwarded",
+                $"Bạn nhận được {awardedPoints} điểm xanh",
+                $"Đơn {assignment.DonorRequest.RequestCode} được cộng {awardedPoints} điểm từ {dto.ActualWeight:0.##} kg thực nhận.", staffId);
         CompleteBatchWhenAllRequestsProcessed(batch);
         await context.SaveChangesAsync();
     }
@@ -1435,11 +1442,16 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
         request.UpdateAt = DateTime.UtcNow;
         batch.TotalWeight += dto.ActualWeight;
         batch.UpdateAt = DateTime.UtcNow;
+        var awardedPoints = await DonationPointWriter.AwardDonationAsync(context, request, dto.ActualWeight, staffId);
         await context.Entry(batch).Collection(x => x.PickupAssignments).LoadAsync();
         CompleteBatchWhenAllRequestsProcessed(batch);
         var actor = await NotificationWriter.ActorNameAsync(context, staffId);
         NotificationWriter.NotifyDonor(context, request, "DonationReceived", "Đã tiếp nhận tại kho",
             $"được {actor} tiếp nhận lúc {NotificationWriter.FormatTime(DateTime.UtcNow)}, khối lượng {dto.ActualWeight:0.##} kg.", staffId);
+        if (awardedPoints > 0)
+            NotificationWriter.NotifyDonor(context, request, "DonationPointsAwarded",
+                $"Bạn nhận được {awardedPoints} điểm xanh",
+                $"Đơn {request.RequestCode} được cộng {awardedPoints} điểm từ {dto.ActualWeight:0.##} kg thực nhận.", staffId);
         await context.SaveChangesAsync();
     }
 

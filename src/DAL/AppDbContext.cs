@@ -28,6 +28,7 @@ namespace DAL
         public DbSet<Voucher> Vouchers => Set<Voucher>();
         public DbSet<VoucherCode> VoucherCodes => Set<VoucherCode>();
         public DbSet<VoucherRedemption> VoucherRedemptions => Set<VoucherRedemption>();
+        public DbSet<DonationPointTransaction> DonationPointTransactions => Set<DonationPointTransaction>();
         public DbSet<Warehouse> Warehouses => Set<Warehouse>();
         public DbSet<WarehouseArea> WarehouseAreas => Set<WarehouseArea>();
         public DbSet<AreaGroup> AreaGroups => Set<AreaGroup>();
@@ -101,6 +102,13 @@ namespace DAL
             base.OnModelCreating(modelBuilder);
 
             modelBuilder.Entity<User>().HasOne(u => u.Role).WithMany(r => r.Users).HasForeignKey(u => u.RoleId);
+            modelBuilder.Entity<DonationPointTransaction>()
+                .HasIndex(x => new { x.DonationRequestId, x.Type }).IsUnique()
+                .HasFilter("[DonationRequestId] IS NOT NULL");
+            modelBuilder.Entity<DonationPointTransaction>().HasOne(x => x.User).WithMany()
+                .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<DonationPointTransaction>().HasOne(x => x.DonationRequest).WithMany()
+                .HasForeignKey(x => x.DonationRequestId).OnDelete(DeleteBehavior.Restrict);
             modelBuilder.Entity<WorkScheduleTemplate>()
                 .HasIndex(x => new { x.WarehouseId, x.Year })
                 .IsUnique();

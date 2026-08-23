@@ -10,10 +10,12 @@ namespace BLL.Services.Interfaces.Voucher
         Task AddVoucherCodesAsync(Guid managerId, Guid voucherId, AddVoucherCodesDto dto);
         Task<List<VoucherCodeDto>> GetVoucherCodesAsync(Guid voucherId);
         Task<List<VoucherDto>> GetAvailableVouchersAsync();
+        Task<List<VoucherDto>> GetManagerVouchersAsync();
         Task<VoucherDto?> GetVoucherAsync(Guid voucherId);
         Task<RedeemVoucherResultDto> RedeemVoucherAsync(Guid userId, Guid voucherId);
         Task<List<MyVoucherDto>> GetMyVouchersAsync(Guid userId);
         Task<List<VoucherRedemptionDto>> GetMyRedemptionsAsync(Guid userId);
         Task<int> GetDonationPointAsync(Guid userId);
+        Task<DonationPointSummaryDto> GetDonationPointSummaryAsync(Guid userId);
     }
 }

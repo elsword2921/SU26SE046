@@ -188,6 +188,35 @@ public class VoucherService : IVoucherService
             .ToListAsync();
     }
 
+    public async Task<List<VoucherDto>> GetManagerVouchersAsync()
+    {
+        var now = DateTime.UtcNow;
+        return await _context.Vouchers
+            .AsNoTracking()
+            .Where(v => v.IsActive != false)
+            .Select(v => new VoucherDto
+            {
+                Id = v.Id,
+                Name = v.Name,
+                PartnerName = v.PartnerName,
+                VoucherUrl = v.VoucherUrl,
+                ImageUrl = v.ImageUrl,
+                Description = v.Description,
+                TermsAndConditions = v.TermsAndConditions,
+                Value = v.Value,
+                RequiredPoints = v.RequiredPoints,
+                StartDate = v.StartDate,
+                ExpireDate = v.ExpireDate,
+                Status = v.Status,
+                AvailableQuantity = v.VoucherCodes.Count(c =>
+                    c.IsActive != false &&
+                    c.Status == VoucherCodeStatus.Available &&
+                    c.ExpireDate > now)
+            })
+            .OrderByDescending(v => v.StartDate)
+            .ToListAsync();
+    }
+
     public async Task<VoucherDto?> GetVoucherAsync(Guid voucherId)
     {
         var now = DateTime.UtcNow;
@@ -254,6 +283,13 @@ public class VoucherService : IVoucherService
                 throw new InvalidOperationException("Voucher is out of stock.");
             user.DonationPoint -= voucher.RequiredPoints;
             user.UpdateAt = now;
+            _context.DonationPointTransactions.Add(new DonationPointTransaction
+            {
+                Id = Guid.NewGuid(), UserId = userId, Points = -voucher.RequiredPoints,
+                BalanceAfter = user.DonationPoint, Type = "VoucherRedeemed",
+                Description = $"Đổi voucher {voucher.Name}", OccurredAt = now,
+                CreateAt = now, CreatedBy = userId, IsActive = true
+            });
             voucherCode.Status = VoucherCodeStatus.Redeemed;
             voucherCode.RedeemedByUserId = userId;
             voucherCode.RedeemedAt = now;
@@ -345,6 +381,23 @@ public class VoucherService : IVoucherService
         if (point == null)
             throw new KeyNotFoundException("User not found.");
         return point.Value;
+    }
+
+    public async Task<DonationPointSummaryDto> GetDonationPointSummaryAsync(Guid userId)
+    {
+        var point = await GetDonationPointAsync(userId);
+        var transactions = await _context.DonationPointTransactions.AsNoTracking()
+            .Where(x => x.UserId == userId && x.IsActive != false)
+            .OrderByDescending(x => x.OccurredAt)
+            .Take(100)
+            .Select(x => new DonationPointTransactionDto
+            {
+                Id = x.Id, Type = x.Type, Points = x.Points, BalanceAfter = x.BalanceAfter,
+                WeightKg = x.WeightKg, Description = x.Description,
+                DonationRequestCode = x.DonationRequest != null ? x.DonationRequest.RequestCode : null,
+                OccurredAt = x.OccurredAt
+            }).ToListAsync();
+        return new DonationPointSummaryDto(point, DonationPointWriter.PointsPerKg, transactions);
     }
 
     private static void ValidateVoucherDates(DateTime startDate,DateTime expireDate)

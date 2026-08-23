@@ -24,6 +24,8 @@ public class VouchersController(
     public async Task<IActionResult> GetCodes(Guid voucherId){return Ok(await service.GetVoucherCodesAsync(voucherId));}
     [HttpGet][Authorize(Roles = "Donor,Manager")]
     public async Task<IActionResult> GetAvailableVouchers(){return Ok(await service.GetAvailableVouchersAsync());}
+    [HttpGet("manager")][Authorize(Roles = "Manager")]
+    public async Task<IActionResult> GetManagerVouchers(){return Ok(await service.GetManagerVouchersAsync());}
     [HttpGet("{voucherId:guid}")][Authorize(Roles = "Donor,Manager")]
     public async Task<IActionResult> GetVoucher(Guid voucherId){var result =await service.GetVoucherAsync(voucherId);return result == null ? NotFound() : Ok(result);}
     [HttpPost("{voucherId:guid}/redeem")][Authorize(Roles = "Donor")]
@@ -34,5 +36,7 @@ public class VouchersController(
     public async Task<IActionResult> MyRedemptions(){return Ok(await service.GetMyRedemptionsAsync(CurrentUserId));}
     [HttpGet("my-points")][Authorize(Roles = "Donor")]
     public async Task<IActionResult> MyPoints(){var points =await service.GetDonationPointAsync(CurrentUserId);return Ok(new{donationPoint = points});}
+    [HttpGet("my-points/summary")][Authorize(Roles = "Donor")]
+    public async Task<IActionResult> MyPointSummary(){return Ok(await service.GetDonationPointSummaryAsync(CurrentUserId));}
     private Guid CurrentUserId =>Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 }
