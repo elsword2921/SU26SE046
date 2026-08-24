@@ -38,5 +38,7 @@ public class VouchersController(
     public async Task<IActionResult> MyPoints(){var points =await service.GetDonationPointAsync(CurrentUserId);return Ok(new{donationPoint = points});}
     [HttpGet("my-points/summary")][Authorize(Roles = "Donor")]
     public async Task<IActionResult> MyPointSummary(){return Ok(await service.GetDonationPointSummaryAsync(CurrentUserId));}
+    [HttpGet("leaderboard")][Authorize(Roles = "Donor,Manager")]
+    public async Task<IActionResult> DonorLeaderboard([FromQuery] int limit = 50){return Ok(await service.GetDonorLeaderboardAsync(limit));}
     private Guid CurrentUserId =>Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 }

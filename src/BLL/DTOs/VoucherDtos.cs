@@ -119,4 +119,13 @@ namespace BLL.DTOs
 
     public record DonationPointSummaryDto(int DonationPoint, int PointsPerKg,
         List<DonationPointTransactionDto> Transactions);
+
+    public record DonorLeaderboardEntryDto(
+        int Rank,
+        Guid UserId,
+        string FullName,
+        string UserName,
+        string? AvatarUrl,
+        decimal TotalWeightKg,
+        int DonationCount);
 }

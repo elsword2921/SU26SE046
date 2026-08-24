@@ -17,5 +17,6 @@ namespace BLL.Services.Interfaces.Voucher
         Task<List<VoucherRedemptionDto>> GetMyRedemptionsAsync(Guid userId);
         Task<int> GetDonationPointAsync(Guid userId);
         Task<DonationPointSummaryDto> GetDonationPointSummaryAsync(Guid userId);
+        Task<List<DonorLeaderboardEntryDto>> GetDonorLeaderboardAsync(int limit = 50);
     }
 }

@@ -400,6 +400,50 @@ public class VoucherService : IVoucherService
         return new DonationPointSummaryDto(point, DonationPointWriter.PointsPerKg, transactions);
     }
 
+    public async Task<List<DonorLeaderboardEntryDto>> GetDonorLeaderboardAsync(int limit = 50)
+    {
+        limit = Math.Clamp(limit, 1, 100);
+
+        var donors = await _context.DonationRequests.AsNoTracking()
+            .Where(x => x.IsActive != false
+                        && x.Donor.IsActive != false
+                        && x.Donor.Role.RoleName == "Donor"
+                        && x.ActualWeight.HasValue
+                        && x.ActualWeight.Value > 0
+                        && x.Status != DonationRequestStatus.Reject
+                        && x.Status != DonationRequestStatus.Cancelled)
+            .GroupBy(x => new
+            {
+                x.DonorId,
+                x.Donor.FullName,
+                x.Donor.UserName,
+                x.Donor.AvatarUrl
+            })
+            .Select(group => new
+            {
+                UserId = group.Key.DonorId,
+                group.Key.FullName,
+                group.Key.UserName,
+                group.Key.AvatarUrl,
+                TotalWeightKg = group.Sum(x => x.ActualWeight!.Value),
+                DonationCount = group.Count()
+            })
+            .OrderByDescending(x => x.TotalWeightKg)
+            .ThenByDescending(x => x.DonationCount)
+            .ThenBy(x => x.FullName)
+            .Take(limit)
+            .ToListAsync();
+
+        return donors.Select((donor, index) => new DonorLeaderboardEntryDto(
+            index + 1,
+            donor.UserId,
+            donor.FullName,
+            donor.UserName,
+            donor.AvatarUrl,
+            decimal.Round(donor.TotalWeightKg, 2),
+            donor.DonationCount)).ToList();
+    }
+
     private static void ValidateVoucherDates(DateTime startDate,DateTime expireDate)
     {
         if (expireDate <= startDate)
