@@ -38,7 +38,7 @@ public record StorageLocationDto(Guid Id, string LocationCode, string AreaName, 
     decimal AvailableCapacityKg, string Status, int MatchScore);
 
 public record PutawayBatchDto(Guid LocationId, string? Notes);
-public record IssueInventoryDto(int Quantity, decimal WeightKg, string Reason,
+public record IssueInventoryDto(decimal WeightKg, string Reason,
     string? ReferenceType, Guid? ReferenceId, string? Notes);
 public record MoveInventoryDto(Guid DestinationLocationId, string Reason, string? Notes);
 

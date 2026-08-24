@@ -628,7 +628,7 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
             .FirstOrDefaultAsync(x => x.Id == locationId && x.IsActive != false)
             ?? throw new InvalidOperationException("Storage location not found.");
         var hasInventory = location.CurrentWeightKg > 0 || await context.Inventories.AnyAsync(x =>
-            x.StorageLocationId == locationId && x.IsActive != false && x.Quantity > 0);
+            x.StorageLocationId == locationId && x.IsActive != false && x.TotalWeight > 0);
         var hasIntakeBatches = await context.IntakeBatches.AnyAsync(x =>
             x.IsActive != false && x.CurrentStorageLocationId == locationId);
         if (hasInventory || hasIntakeBatches)
@@ -641,8 +641,8 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
 
     public async Task ConfirmReceiptAsync(Guid staffId, Guid batchId, ConfirmWarehouseReceiptDto dto)
     {
-        if (dto.ActualItemCount <= 0 || dto.ActualWeightKg <= 0)
-            throw new InvalidOperationException("Actual item count and weight must be greater than zero.");
+        if (dto.ActualWeightKg <= 0)
+            throw new InvalidOperationException("Actual weight must be greater than zero.");
         if (!dto.SealIntact && string.IsNullOrWhiteSpace(dto.DiscrepancyNotes))
             throw new InvalidOperationException("A discrepancy note is required when the seal is not intact.");
 
@@ -654,14 +654,15 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
             throw new InvalidOperationException("Only a batch pending warehouse receipt can be confirmed.");
 
         var expectedCount = batch.Items.Count(x => x.IsActive != false);
-        var notes = BuildReceiptNotes(expectedCount, dto);
+        var actualItemCount = dto.ActualItemCount > 0 ? dto.ActualItemCount : expectedCount;
+        var notes = BuildReceiptNotes(expectedCount, dto with { ActualItemCount = actualItemCount });
         batch.Status = "WarehouseReceived";
         batch.WarehouseReceivedAt = DateTime.UtcNow;
         batch.WarehouseReceivedByStaffId = staffId;
-        batch.ReceivedItemCount = dto.ActualItemCount;
+        batch.ReceivedItemCount = actualItemCount;
         batch.ReceivedWeight = dto.ActualWeightKg;
         batch.WarehouseReceiptNotes = notes;
-        batch.TotalItem = dto.ActualItemCount;
+        batch.TotalItem = actualItemCount;
         batch.TotalWeight = dto.ActualWeightKg;
         batch.UpdateAt = DateTime.UtcNow;
         batch.UpdatedBy = staffId;
@@ -677,12 +678,12 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
             GarmentGroup = batch.GarmentGroup, ClothingType = batch.ClothingType,
             Gender = batch.Gender, TargetUser = batch.TargetUser, Size = batch.Size,
             ProcessingDirection = batch.ProcessingDirection, ConditionRating = batch.ConditionRating,
-            Quantity = dto.ActualItemCount, TotalWeight = dto.ActualWeightKg,
+            Quantity = actualItemCount, TotalWeight = dto.ActualWeightKg,
             Status = "AwaitingPutaway", CreateAt = DateTime.UtcNow, CreatedBy = staffId
         };
         context.Inventories.Add(inventory);
         AddTransaction(staffId, batch.WarehouseId, "RECEIPT", "ClassifiedBatch", batch.Id,
-            notes, inventory, dto.ActualItemCount, dto.ActualWeightKg, 0, dto.ActualItemCount,
+            notes, inventory, actualItemCount, dto.ActualWeightKg, 0, actualItemCount,
             0, dto.ActualWeightKg, null, null);
         var sourceIds = await context.ClassifiedBatchDonationRequests.Where(x => x.ClassifiedBatchId == batch.Id)
             .Select(x => x.DonationRequestId).ToListAsync();
@@ -847,24 +848,22 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
 
     public async Task IssueAsync(Guid staffId, Guid inventoryId, IssueInventoryDto dto)
     {
-        if (dto.Quantity <= 0 || dto.WeightKg <= 0 || string.IsNullOrWhiteSpace(dto.Reason))
-            throw new InvalidOperationException("Quantity, weight and issue reason are required.");
+        if (dto.WeightKg <= 0 || string.IsNullOrWhiteSpace(dto.Reason))
+            throw new InvalidOperationException("Weight and issue reason are required.");
         await using var transaction = await context.Database.BeginTransactionAsync();
         var inventory = await InventoryForMutation(inventoryId);
         if (inventory.Status != "Available") throw new InvalidOperationException("Inventory is not available for issue.");
-        if (inventory.Quantity - inventory.ReservedQuantity < dto.Quantity
-            || inventory.TotalWeight - inventory.ReservedWeight < dto.WeightKg)
+        if (inventory.TotalWeight - inventory.ReservedWeight < dto.WeightKg)
             throw new InvalidOperationException("Requested issue exceeds available inventory.");
         var beforeQuantity = inventory.Quantity;
         var beforeWeight = inventory.TotalWeight;
-        inventory.Quantity -= dto.Quantity;
-        inventory.TotalWeight -= dto.WeightKg;
-        inventory.Status = inventory.Quantity == 0 ? "Depleted" : "Available";
+        inventory.TotalWeight = Math.Max(0, inventory.TotalWeight - dto.WeightKg);
+        inventory.Status = inventory.TotalWeight <= 0 ? "Depleted" : "Available";
         inventory.UpdateAt = DateTime.UtcNow;
         inventory.UpdatedBy = staffId;
         AdjustLocationWeight(inventory, -dto.WeightKg);
         AddTransaction(staffId, inventory.WarehouseId, "OUT", dto.ReferenceType, dto.ReferenceId,
-            $"{dto.Reason}. {dto.Notes}".Trim(), inventory, dto.Quantity, dto.WeightKg,
+            $"{dto.Reason}. {dto.Notes}".Trim(), inventory, 0, dto.WeightKg,
             beforeQuantity, inventory.Quantity, beforeWeight, inventory.TotalWeight,
             inventory.StorageLocationId, null);
         var sourceIds = await context.ClassifiedBatchDonationRequests

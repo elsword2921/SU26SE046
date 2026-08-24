@@ -19,7 +19,7 @@ public class DistributionOperationsService(AppDbContext context, HttpClient ghnC
             .OrderBy(x => x.WarehouseName).Select(x => new { x.Id, x.WarehouseName, x.Address }).ToListAsync();
         var query = context.Inventories.AsNoTracking().Include(x => x.ClassifiedBatch)!.ThenInclude(x => x!.Items)
             .Where(x => x.IsActive != false && x.Status == "Available" && x.ProcessingDirection == "Charity"
-                && x.Quantity > x.ReservedQuantity);
+                && x.TotalWeight > x.ReservedWeight);
         if (warehouseId.HasValue) query = query.Where(x => x.WarehouseId == warehouseId);
         var rows = await query.OrderBy(x => x.Sku).ToListAsync();
         var items = rows.Select(x => new DistributionCatalogItemDto(x.Id, x.ClassifiedBatchId!.Value,
@@ -45,17 +45,16 @@ public class DistributionOperationsService(AppDbContext context, HttpClient ghnC
             RequestNotes=dto.Notes, RequestedAt=DateTime.UtcNow, Status="PendingManagerApproval", CreateAt=DateTime.UtcNow, IsActive=true };
         foreach (var input in dto.Items)
         {
-            var inventory=inventories.Single(x=>x.Id==input.InventoryId); var available=inventory.Quantity-inventory.ReservedQuantity;
-            if(input.Quantity<=0||input.Quantity>available) throw new InvalidOperationException($"Invalid quantity for {inventory.Sku}.");
-            var unitWeight=inventory.Quantity==0?0:inventory.TotalWeight/inventory.Quantity;
+            var inventory=inventories.Single(x=>x.Id==input.InventoryId); var available=inventory.TotalWeight-inventory.ReservedWeight;
+            if(input.WeightKg<=0||input.WeightKg>available) throw new InvalidOperationException($"Invalid weight for {inventory.Sku}.");
             request.Items.Add(new DistributionItem { Id=Guid.NewGuid(), InventoryId=inventory.Id,
-                ConditionRating=inventory.ConditionRating, RequestedQuantity=input.Quantity,
-                RequestedWeight=Math.Round(unitWeight*input.Quantity,2), CreateAt=DateTime.UtcNow, IsActive=true });
+                ConditionRating=inventory.ConditionRating, RequestedQuantity=0,
+                RequestedWeight=Math.Round(input.WeightKg,2), CreateAt=DateTime.UtcNow, IsActive=true });
         }
         context.DistributionRequests.Add(request);
         var managers=await context.Users.Where(x=>x.IsActive!=false&&x.Role.RoleName=="Manager").Select(x=>x.Id).ToListAsync();
         foreach(var id in managers) NotificationWriter.NotifyUser(context,id,"DistributionRequested","Yêu cầu nhận đồ từ thiện mới",
-            $"Tổ chức {request.RecipientName} vừa tạo yêu cầu gồm {request.Items.Sum(x=>x.RequestedQuantity)} item.",
+            $"Tổ chức {request.RecipientName} vừa tạo yêu cầu gồm {request.Items.Sum(x=>x.RequestedWeight):0.##} kg.",
             $"/manager/distributions?requestId={request.Id}",organizationId);
         await context.SaveChangesAsync(); return request.Id;
     }
@@ -80,13 +79,12 @@ public class DistributionOperationsService(AppDbContext context, HttpClient ghnC
         foreach (var input in dto.Items)
         {
             var inventory = inventories.Single(x => x.Id == input.InventoryId);
-            var available = inventory.Quantity - inventory.ReservedQuantity;
-            if (input.Quantity <= 0 || input.Quantity > available)
-                throw new InvalidOperationException($"Invalid quantity for {inventory.Sku}.");
-            var unitWeight = inventory.Quantity == 0 ? 0 : inventory.TotalWeight / inventory.Quantity;
+            var available = inventory.TotalWeight - inventory.ReservedWeight;
+            if (input.WeightKg <= 0 || input.WeightKg > available)
+                throw new InvalidOperationException($"Invalid weight for {inventory.Sku}.");
             request.Items.Add(new DistributionItem { Id = Guid.NewGuid(), InventoryId = inventory.Id,
-                ConditionRating = inventory.ConditionRating, RequestedQuantity = input.Quantity,
-                RequestedWeight = Math.Round(unitWeight * input.Quantity, 2), CreateAt = DateTime.UtcNow, IsActive = true });
+                ConditionRating = inventory.ConditionRating, RequestedQuantity = 0,
+                RequestedWeight = Math.Round(input.WeightKg, 2), CreateAt = DateTime.UtcNow, IsActive = true });
         }
         request.WarehouseId = dto.WarehouseId;
         request.RecipientName = dto.RecipientName.Trim();
@@ -129,7 +127,7 @@ public class DistributionOperationsService(AppDbContext context, HttpClient ghnC
         var request=await context.DistributionRequests.Include(x=>x.Items).ThenInclude(x=>x.Inventory)
             .FirstOrDefaultAsync(x=>x.Id==id&&x.Status=="PendingManagerApproval")??throw new InvalidOperationException("Pending request not found.");
         if(!dto.Approved){request.Status="Rejected";request.RejectReason=dto.Notes;NotificationWriter.NotifyUser(context,request.UserId,"DistributionRejected","Yêu cầu chưa được duyệt",dto.Notes??"Manager đã từ chối yêu cầu.",$"/organization/distributions/{id}",managerId);await context.SaveChangesAsync();await tx.CommitAsync();return;}
-        foreach(var item in request.Items){var inv=item.Inventory;var available=inv.Quantity-inv.ReservedQuantity;if(item.RequestedQuantity>available)throw new InvalidOperationException($"Insufficient inventory for {inv.Sku}.");var weight=inv.Quantity==0?0:Math.Round(inv.TotalWeight/inv.Quantity*item.RequestedQuantity,2);inv.ReservedQuantity+=item.RequestedQuantity;inv.ReservedWeight+=weight;item.ApprovedQuantity=item.RequestedQuantity;item.RequestedWeight=weight;}
+        foreach(var item in request.Items){var inv=item.Inventory;var available=inv.TotalWeight-inv.ReservedWeight;if(item.RequestedWeight>available)throw new InvalidOperationException($"Insufficient inventory weight for {inv.Sku}.");inv.ReservedWeight+=item.RequestedWeight;item.ApprovedQuantity=0;}
         request.Status="ApprovedAwaitingWarehouse";request.ApprovedAt=DateTime.UtcNow;request.ApprovedByManagerId=managerId;
         var staff=await context.Users.Where(x=>x.WarehouseId==request.WarehouseId&&x.IsActive!=false&&x.Role.RoleName=="WarehouseStaff").Select(x=>x.Id).ToListAsync();
         foreach(var userId in staff)NotificationWriter.NotifyUser(context,userId,"DistributionApproved","Có yêu cầu xuất kho mới",$"Yêu cầu của {request.RecipientName} đã được duyệt.",$"/warehouse/distributions?requestId={id}",managerId);
@@ -147,7 +145,7 @@ public class DistributionOperationsService(AppDbContext context, HttpClient ghnC
         var staff=await context.Users.FirstAsync(x=>x.Id==staffId);if(staff.WarehouseId!=request.WarehouseId)throw new InvalidOperationException("Request belongs to another warehouse.");
         var transaction=new InventoryTransaction{Id=Guid.NewGuid(),WarehouseId=request.WarehouseId,TransactionCode=$"TX-OUT-{VietnamTime.Now:yyyyMMddHHmmss}-{Guid.NewGuid():N}"[..30].ToUpperInvariant(),TransactionType="OUT",ReferenceType="DistributionRequest",ReferenceId=request.Id,Status="Posted",Notes=dto.Notes,PerformedByStaffId=staffId,PerformedAt=VietnamTime.Now,CreateAt=VietnamTime.Now,IsActive=true};
         var donorIds=new HashSet<Guid>();
-        foreach(var item in request.Items){var inv=item.Inventory;var qty=item.ApprovedQuantity;var weight=item.RequestedWeight;var beforeQty=inv.Quantity;var beforeWeight=inv.TotalWeight;inv.ReservedQuantity-=qty;inv.ReservedWeight-=weight;inv.Quantity-=qty;inv.TotalWeight-=weight;inv.Status=inv.Quantity==0?"Depleted":"Available";if(inv.StorageLocation!=null){inv.StorageLocation.CurrentWeightKg=Math.Max(0,inv.StorageLocation.CurrentWeightKg-weight);inv.StorageLocation.Area.CurrentKg=Math.Max(0,inv.StorageLocation.Area.CurrentKg-weight);}request.Warehouse.CurrentWeight=Math.Max(0,request.Warehouse.CurrentWeight-weight);item.IssuedQuantity=qty;item.IssuedWeight=weight;transaction.Items.Add(new TransactionItem{Id=Guid.NewGuid(),InventoryId=inv.Id,ClassifiedBatchId=inv.ClassifiedBatchId,Quantity=qty,Weight=weight,QuantityBefore=beforeQty,QuantityAfter=inv.Quantity,WeightBefore=beforeWeight,WeightAfter=inv.TotalWeight,SourceLocationId=inv.StorageLocationId,CreateAt=DateTime.UtcNow,IsActive=true});foreach(var source in inv.ClassifiedBatch!.DonationRequestSources)donorIds.Add(source.DonationRequestId);}
+        foreach(var item in request.Items){var inv=item.Inventory;var weight=item.RequestedWeight;var beforeQty=inv.Quantity;var beforeWeight=inv.TotalWeight;if(weight<=0||weight>inv.ReservedWeight||weight>inv.TotalWeight)throw new InvalidOperationException($"Insufficient reserved inventory weight for {inv.Sku}.");inv.ReservedWeight=Math.Max(0,inv.ReservedWeight-weight);inv.TotalWeight=Math.Max(0,inv.TotalWeight-weight);inv.Status=inv.TotalWeight<=0?"Depleted":"Available";if(inv.StorageLocation!=null){inv.StorageLocation.CurrentWeightKg=Math.Max(0,inv.StorageLocation.CurrentWeightKg-weight);inv.StorageLocation.Area.CurrentKg=Math.Max(0,inv.StorageLocation.Area.CurrentKg-weight);}request.Warehouse.CurrentWeight=Math.Max(0,request.Warehouse.CurrentWeight-weight);item.IssuedQuantity=0;item.IssuedWeight=weight;transaction.Items.Add(new TransactionItem{Id=Guid.NewGuid(),InventoryId=inv.Id,ClassifiedBatchId=inv.ClassifiedBatchId,Quantity=0,Weight=weight,QuantityBefore=beforeQty,QuantityAfter=inv.Quantity,WeightBefore=beforeWeight,WeightAfter=inv.TotalWeight,SourceLocationId=inv.StorageLocationId,CreateAt=DateTime.UtcNow,IsActive=true});foreach(var source in inv.ClassifiedBatch!.DonationRequestSources)donorIds.Add(source.DonationRequestId);}
         context.InventoryTransactions.Add(transaction);request.Status="ReadyForGhn";request.IssueSlipCode=$"PXK-{VietnamTime.Now:yyyyMMdd}-{Guid.NewGuid():N}"[..21].ToUpperInvariant();request.WarehouseIssuedAt=VietnamTime.Now;request.WarehouseIssuedByStaffId=staffId;
         var donors=await context.DonationRequests.Where(x=>donorIds.Contains(x.Id)).ToListAsync();foreach(var donor in donors)NotificationWriter.NotifyDonor(context,donor,"DonationDistributed","Món quà đã được chuyển đến tổ chức từ thiện",$"một phần đóng góp của bạn đã được xuất kho gửi đến {request.RecipientName}. Cảm ơn bạn đã lan tỏa yêu thương — hãy tiếp tục đồng hành cùng ReThreads!",staffId);
         NotificationWriter.NotifyUser(context,request.UserId,"DistributionIssued","Kho đã chuẩn bị xong hàng",$"Phiếu xuất {request.IssueSlipCode} đã được lập, đang chờ GHN đến lấy.",$"/organization/distributions/{id}",staffId);
@@ -193,7 +191,7 @@ public class DistributionOperationsService(AppDbContext context, HttpClient ghnC
         else
             items.AddRange(request.Items.Select(x=>new Dictionary<string,object>{
                 ["name"]=x.Inventory.ClothingType,["code"]=x.Inventory.Sku,
-                ["quantity"]=x.IssuedQuantity,["price"]=0}));
+                ["quantity"]=1,["price"]=0}));
         var payload=new Dictionary<string,object?>{
             ["payment_type_id"]=dto.PaymentTypeId,["service_type_id"]=serviceTypeId,
             ["required_note"]=dto.RequiredNote??"KHONGCHOXEMHANG",

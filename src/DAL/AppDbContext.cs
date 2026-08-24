@@ -29,6 +29,7 @@ namespace DAL
         public DbSet<VoucherCode> VoucherCodes => Set<VoucherCode>();
         public DbSet<VoucherRedemption> VoucherRedemptions => Set<VoucherRedemption>();
         public DbSet<DonationPointTransaction> DonationPointTransactions => Set<DonationPointTransaction>();
+        public DbSet<AiPromptConfiguration> AiPromptConfigurations => Set<AiPromptConfiguration>();
         public DbSet<Warehouse> Warehouses => Set<Warehouse>();
         public DbSet<WarehouseArea> WarehouseAreas => Set<WarehouseArea>();
         public DbSet<AreaGroup> AreaGroups => Set<AreaGroup>();
@@ -102,6 +103,7 @@ namespace DAL
             base.OnModelCreating(modelBuilder);
 
             modelBuilder.Entity<User>().HasOne(u => u.Role).WithMany(r => r.Users).HasForeignKey(u => u.RoleId);
+            modelBuilder.Entity<AiPromptConfiguration>().HasIndex(x => x.Feature).IsUnique();
             modelBuilder.Entity<DonationPointTransaction>()
                 .HasIndex(x => new { x.DonationRequestId, x.Type }).IsUnique()
                 .HasFilter("[DonationRequestId] IS NOT NULL");

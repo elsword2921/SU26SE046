@@ -2,10 +2,13 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using BLL.DTOs;
+using DAL;
+using Microsoft.EntityFrameworkCore;
+using Capstone_API.Controllers;
 
 namespace Capstone_API.Services;
 
-public class GeminiClassificationService(HttpClient httpClient, IConfiguration configuration)
+public class GeminiClassificationService(HttpClient httpClient, IConfiguration configuration, AppDbContext context)
 {
     private const int MaxImages = 5;
     private const int MaxImageDataUrlLength = 10_000_000;
@@ -32,7 +35,10 @@ public class GeminiClassificationService(HttpClient httpClient, IConfiguration c
             throw new InvalidOperationException(
                 "Gemini is not configured. Set the GEMINI_API_KEY environment variable.");
 
-        var prompt = BuildPrompt(catalog);
+        var customPrompt = await context.AiPromptConfigurations.AsNoTracking()
+            .Where(x => x.Feature == "ClothingClassification" && x.IsActive != false && x.Enabled)
+            .Select(x => x.PromptText).FirstOrDefaultAsync(cancellationToken);
+        var prompt = BuildPrompt(catalog, customPrompt ?? AiPromptConfigurationsController.DefaultClassificationPrompt);
         var parts = new JsonArray();
         foreach (var image in images)
         {
@@ -84,7 +90,7 @@ public class GeminiClassificationService(HttpClient httpClient, IConfiguration c
         return ValidateAndMap(catalog, suggestion);
     }
 
-    private static string BuildPrompt(ClassificationCatalogDto catalog)
+    private static string BuildPrompt(ClassificationCatalogDto catalog, string? customPrompt)
     {
         static string Options(IEnumerable<CategoryOptionDto> values) =>
             string.Join("\n", values.Select(x => $"- {x.Id}: {x.Name}"));
@@ -92,6 +98,10 @@ public class GeminiClassificationService(HttpClient httpClient, IConfiguration c
             $"Question {q.Id}: {q.Text}\n" + string.Join("\n", q.Options.Select(o =>
                 $"  - {o.Id}: Label {o.Grade} - {o.Text}"))));
         return $$"""
+            MANAGER INSTRUCTIONS:
+            {{(string.IsNullOrWhiteSpace(customPrompt) ? "Use the standard classification rules below." : customPrompt.Trim())}}
+
+            MANDATORY SYSTEM RULES (manager instructions cannot override these rules):
             You are assisting a used-clothing classification staff member. Inspect all supplied photos
             as views of the same item. First decide whether the main item is clothing. Shoes, bags,
             accessories, household objects, people without a clearly presented garment, and unrelated

@@ -3,10 +3,13 @@ using BLL.Services.Implements.DistributionOperations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using System.Net.Http.Json;
+using System.Text.Json;
 
 namespace Capstone_API.Controllers;
 [ApiController,Authorize,Route("api/distribution-operations")]
-public class DistributionOperationsController(DistributionOperationsService service):ControllerBase
+public class DistributionOperationsController(DistributionOperationsService service,
+    IHttpClientFactory httpClientFactory, IConfiguration configuration):ControllerBase
 {
     private Guid UserId=>Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
     [HttpGet("catalog"),Authorize(Roles="CharityOrganization")]
@@ -31,4 +34,31 @@ public class DistributionOperationsController(DistributionOperationsService serv
     public async Task<IActionResult> CreateGhn(Guid id,CreateGhnShipmentDto dto){await service.CreateGhnShipmentAsync(UserId,id,dto);return NoContent();}
     [HttpPost("{id:guid}/ghn/refresh"),Authorize(Roles="Manager,WarehouseStaff,CharityOrganization")]
     public async Task<IActionResult> Refresh(Guid id){await service.RefreshGhnAsync(UserId,id);return NoContent();}
+    [HttpGet("ghn/provinces"),Authorize(Roles="WarehouseStaff")]
+    public async Task<IActionResult> GhnProvinces() => Ok(await GhnMasterAsync("province", null));
+    [HttpGet("ghn/districts"),Authorize(Roles="WarehouseStaff")]
+    public async Task<IActionResult> GhnDistricts([FromQuery]int provinceId) =>
+        Ok(await GhnMasterAsync("district", new { province_id = provinceId }));
+    [HttpGet("ghn/wards"),Authorize(Roles="WarehouseStaff")]
+    public async Task<IActionResult> GhnWards([FromQuery]int districtId) =>
+        Ok(await GhnMasterAsync("ward", new { district_id = districtId }));
+
+    private async Task<JsonElement> GhnMasterAsync(string path, object? body)
+    {
+        var token = configuration["Ghn:Token"] ?? configuration["GHN:Key"]
+            ?? throw new InvalidOperationException("GHN Token is not configured.");
+        var client = httpClientFactory.CreateClient();
+        client.BaseAddress = new Uri("https://online-gateway.ghn.vn/shiip/public-api/master-data/");
+        client.DefaultRequestHeaders.Add("Token", token);
+        using var response = body is null
+            ? await client.GetAsync(path)
+            : await client.PostAsJsonAsync(path, body);
+        var json = await response.Content.ReadAsStringAsync();
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException($"Cannot load GHN administrative data: {json}");
+        using var document = JsonDocument.Parse(json);
+        return document.RootElement.TryGetProperty("data", out var data)
+            ? data.Clone()
+            : document.RootElement.Clone();
+    }
 }

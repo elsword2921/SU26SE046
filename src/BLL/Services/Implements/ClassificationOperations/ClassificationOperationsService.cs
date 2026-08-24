@@ -167,7 +167,7 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
             ImageUrls = dto.ImageUrls, Notes = dto.Notes, ClassifiedByStaffId = staffId, ClassifiedAt = DateTime.UtcNow,
             CreateAt = DateTime.UtcNow, CreatedBy = staffId
         };
-        var groupedBatch = await GetOrCreateGroupedBatchAsync(batch, item, staffId);
+        var groupedBatch = await GetOrCreateGroupedBatchAsync(batch, item, categorySelection, staffId);
         item.ClassifiedBatchId = groupedBatch.Id;
         await LinkBatchProvenanceAsync(groupedBatch.Id, batchId, staffId);
         groupedBatch.TotalItem++;
@@ -222,7 +222,7 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
         item.UpdateAt = DateTime.UtcNow;
         item.UpdatedBy = staffId;
 
-        var newGroup = await GetOrCreateGroupedBatchAsync(batch, item, staffId);
+        var newGroup = await GetOrCreateGroupedBatchAsync(batch, item, selection, staffId);
         if (oldGroup?.Id != newGroup.Id)
         {
             if (oldGroup is not null)
@@ -811,23 +811,30 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
         ?? throw new InvalidOperationException("Intake batch not found.");
 
     private async Task<ClassifiedBatch> GetOrCreateGroupedBatchAsync(IntakeBatch intakeBatch,
-        ClassifiedItem item, Guid staffId)
+        ClassifiedItem item, CategorySelection selection, Guid staffId)
     {
         var localDate = VietnamTime.Today;
+        var isAdult = selection.Target.Code.Equals("TARGET_ADULT", StringComparison.OrdinalIgnoreCase);
+        var audienceKey = isAdult ? "ADULT" : "CHILDREN";
+        var genderKey = isAdult ? selection.Gender.Id.ToString() : "ALL";
         var key = string.Join('|', intakeBatch.WarehouseId, localDate.ToString("yyyyMMdd"),
-            item.ConditionGradeId, item.FabricTypeId, item.GarmentGroupId, item.ClothingTypeId,
-            item.GenderId, item.TargetUserId, item.SizeId, item.ProcessingDirection.ToLowerInvariant());
+            item.ConditionGradeId, selection.Group.Id, audienceKey, genderKey,
+            item.ProcessingDirection.ToLowerInvariant());
         var group = await context.ClassifiedBatches.FirstOrDefaultAsync(x => x.GroupKey == key && x.IsActive != false);
         if (group is not null) return group;
         group = new ClassifiedBatch
         {
             Id = Guid.NewGuid(), WarehouseId = intakeBatch.WarehouseId, ClassificationDate = localDate,
             GroupKey = key, BatchCode = $"CB-{localDate:yyyyMMdd}-{Grade(item.ConditionRating)}-{Guid.NewGuid():N}"[..24].ToUpperInvariant(),
-            FabricTypeId = item.FabricTypeId, GarmentGroupId = item.GarmentGroupId,
-            ClothingTypeId = item.ClothingTypeId, GenderId = item.GenderId,
-            TargetUserId = item.TargetUserId, SizeId = item.SizeId, ConditionGradeId = item.ConditionGradeId,
-            FabricType = item.FabricType, GarmentGroup = item.GarmentGroup, ClothingType = item.ClothingType,
-            Gender = item.Gender, TargetUser = item.TargetUser, Size = item.Size,
+            FabricTypeId = null, GarmentGroupId = selection.Group.Id,
+            ClothingTypeId = null, GenderId = isAdult ? selection.Gender.Id : null,
+            TargetUserId = isAdult ? selection.Target.Id : null, SizeId = null,
+            ConditionGradeId = item.ConditionGradeId,
+            FabricType = "Nhiều chất liệu", GarmentGroup = selection.Group.Name,
+            ClothingType = selection.Group.Name,
+            Gender = isAdult ? selection.Gender.Name : "Không phân biệt",
+            TargetUser = isAdult ? selection.Target.Name : "Trẻ em / Em bé",
+            Size = "Nhiều kích cỡ",
             ConditionRating = item.ConditionRating, ProcessingDirection = item.ProcessingDirection,
             Status = "Open", TotalItem = 0, TotalWeight = 0, CreateAt = DateTime.UtcNow,
             CreatedBy = staffId

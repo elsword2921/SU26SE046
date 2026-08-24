@@ -8,7 +8,7 @@ namespace Capstone_API.Controllers;
 
 [ApiController]
 [Route("api/manager-accounts")]
-[Authorize(Roles = "Manager")]
+[Authorize(Roles = "Manager,Admin")]
 public class ManagerAccountsController(IManagerAccountService service) : ControllerBase
 {
     [HttpGet]

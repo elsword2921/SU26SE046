@@ -6,7 +6,7 @@ namespace Capstone_API.Controllers;
 
 [ApiController]
 [Route("api/manager-dashboard")]
-[Authorize(Roles = "Manager")]
+[Authorize(Roles = "Manager,Admin")]
 public class ManagerDashboardController(IManagerDashboardService service) : ControllerBase
 {
     [HttpGet]
