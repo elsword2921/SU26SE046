@@ -25,7 +25,11 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
                 && x.ClassificationTeam!.Members.Any(m => m.StaffId == staffId && m.IsActive != false)
                 && (x.Status == "AssignedToClassification"
                 || x.Status == "AwaitingClassificationCount" || x.Status == "ReadyForClassification"
-                || x.Status == "Classifying" || x.Status == "InClassifiedArea"))
+                || x.Status == "Classifying"
+                || (x.Status == "InClassifiedArea" && x.ClassifiedItems.Any(item =>
+                    item.IsActive != false && item.ClassifiedBatch != null
+                    && item.ClassifiedBatch.IsActive != false
+                    && item.ClassifiedBatch.Status == "Open"))))
             .OrderByDescending(x => x.IntakeDate)
             .Select(x => new ClassificationBatchSummaryDto(x.Id, x.BatchCode, x.RouteName, x.IntakeDate,
                 x.TotalWeight, x.Status,
@@ -820,12 +824,16 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
         var key = string.Join('|', intakeBatch.WarehouseId, localDate.ToString("yyyyMMdd"),
             item.ConditionGradeId, selection.Group.Id, audienceKey, genderKey,
             item.ProcessingDirection.ToLowerInvariant());
-        var group = await context.ClassifiedBatches.FirstOrDefaultAsync(x => x.GroupKey == key && x.IsActive != false);
+        var group = await context.ClassifiedBatches.FirstOrDefaultAsync(x => x.GroupKey.StartsWith(key)
+            && x.Status == "Open" && x.IsActive != false);
         if (group is not null) return group;
+        var groupKey = await context.ClassifiedBatches.AnyAsync(x => x.GroupKey.StartsWith(key))
+            ? $"{key}|{Guid.NewGuid():N}"
+            : key;
         group = new ClassifiedBatch
         {
             Id = Guid.NewGuid(), WarehouseId = intakeBatch.WarehouseId, ClassificationDate = localDate,
-            GroupKey = key, BatchCode = $"CB-{localDate:yyyyMMdd}-{Grade(item.ConditionRating)}-{Guid.NewGuid():N}"[..24].ToUpperInvariant(),
+            GroupKey = groupKey, BatchCode = $"CB-{localDate:yyyyMMdd}-{Grade(item.ConditionRating)}-{Guid.NewGuid():N}"[..24].ToUpperInvariant(),
             FabricTypeId = null, GarmentGroupId = selection.Group.Id,
             ClothingTypeId = null, GenderId = isAdult ? selection.Gender.Id : null,
             TargetUserId = isAdult ? selection.Target.Id : null, SizeId = null,
