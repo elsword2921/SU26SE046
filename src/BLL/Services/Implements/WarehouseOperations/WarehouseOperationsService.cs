@@ -376,6 +376,7 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
     {
         await RequireManagerAsync(userId);
         ValidateNameAndCapacity(dto.AreaName, dto.CapacityKg, "Area");
+        var areaType = NormalizeAreaType(dto.AreaType);
         var warehouse = await context.Warehouses.AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == dto.WarehouseId && x.IsActive != false)
             ?? throw new InvalidOperationException("Warehouse not found.");
@@ -392,7 +393,8 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
         var area = new WarehouseArea
         {
             Id = Guid.NewGuid(), WarehouseId = dto.WarehouseId, AreaName = dto.AreaName.Trim(),
-            Description = dto.Description?.Trim(), CapacityKg = dto.CapacityKg, CurrentKg = 0,
+            AreaType = areaType, Description = dto.Description?.Trim(),
+            CapacityKg = dto.CapacityKg, CurrentKg = 0,
             CreateAt = DateTime.UtcNow, CreatedBy = userId, IsActive = true
         };
         context.WarehouseAreas.Add(area);
@@ -404,6 +406,7 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
     {
         await RequireManagerAsync(userId);
         ValidateNameAndCapacity(dto.AreaName, dto.CapacityKg, "Area");
+        var areaType = NormalizeAreaType(dto.AreaType);
         var area = await context.WarehouseAreas.FirstOrDefaultAsync(x => x.Id == areaId && x.IsActive != false)
             ?? throw new InvalidOperationException("Warehouse area not found.");
         if (area.WarehouseId != dto.WarehouseId)
@@ -430,6 +433,10 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
             .Where(x => x.IsActive != false && x.CurrentAreaId == areaId)
             .SumAsync(x => (decimal?)x.TotalWeight) ?? 0;
         var actualAreaWeight = inventoryWeight + intakeBatchWeight;
+        if (!string.Equals(area.AreaType, areaType, StringComparison.OrdinalIgnoreCase)
+            && Math.Max(area.CurrentKg, actualAreaWeight) > 0)
+            throw new InvalidOperationException(
+                "Area purpose cannot be changed while inventory or intake batches remain in the area.");
         if (dto.CapacityKg < actualAreaWeight)
             throw new InvalidOperationException(
                 $"Area capacity cannot be lower than its current {actualAreaWeight} kg stock.");
@@ -440,11 +447,25 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
                 && x.IsActive != false && x.AreaName == dto.AreaName.Trim()))
             throw new InvalidOperationException("An active area with this name already exists in the warehouse.");
         area.AreaName = dto.AreaName.Trim();
+        area.AreaType = areaType;
         area.Description = dto.Description?.Trim();
         area.CapacityKg = dto.CapacityKg;
         area.UpdateAt = DateTime.UtcNow;
         area.UpdatedBy = userId;
         await context.SaveChangesAsync();
+    }
+
+    private static string NormalizeAreaType(string? areaType)
+    {
+        return areaType?.Trim().ToLowerInvariant() switch
+        {
+            "receiving" => "Receiving",
+            "unclassified" => "Unclassified",
+            "classified" => "Classified",
+            "storage" => "Storage",
+            _ => throw new InvalidOperationException(
+                "Area purpose must be Receiving, Unclassified, Classified or Storage.")
+        };
     }
 
     public async Task DeleteAreaAsync(Guid userId, Guid areaId)

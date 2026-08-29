@@ -67,7 +67,7 @@ public record WarehouseClassifiedBatchTraceDto(Guid Id, string BatchCode, string
     IReadOnlyList<string> DonationRequestCodes);
 
 public record SaveWarehouseAreaDto(Guid WarehouseId, string AreaName, string? Description,
-    decimal CapacityKg);
+    decimal CapacityKg, string AreaType = "Storage");
 public record CreateWarehouseDto(string WarehouseName, string Address, string? PhoneNumber,
     string? Email, string? Description, decimal TotalCapacityKg, double? Latitude, double? Longitude,
     double ServiceRadiusKm = 24);
