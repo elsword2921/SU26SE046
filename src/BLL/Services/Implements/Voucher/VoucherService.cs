@@ -397,7 +397,8 @@ public class VoucherService : IVoucherService
                 DonationRequestCode = x.DonationRequest != null ? x.DonationRequest.RequestCode : null,
                 OccurredAt = x.OccurredAt
             }).ToListAsync();
-        return new DonationPointSummaryDto(point, DonationPointWriter.PointsPerKg, transactions);
+        var pointsPerKg = await DonationPointWriter.GetPointsPerKgAsync(_context);
+        return new DonationPointSummaryDto(point, pointsPerKg, transactions);
     }
 
     public async Task<List<DonorLeaderboardEntryDto>> GetDonorLeaderboardAsync(int limit = 50)

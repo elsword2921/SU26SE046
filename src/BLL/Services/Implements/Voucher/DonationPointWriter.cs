@@ -6,7 +6,14 @@ namespace BLL.Services.Implements.Voucher;
 
 public static class DonationPointWriter
 {
-    public const int PointsPerKg = 10;
+    public static async Task<int> GetPointsPerKgAsync(AppDbContext context)
+    {
+        return await context.DonationPointRules.AsNoTracking()
+            .Where(x => x.IsActive != false)
+            .OrderByDescending(x => x.UpdateAt ?? x.CreateAt)
+            .Select(x => x.PointsPerKg)
+            .FirstAsync();
+    }
 
     public static async Task<int> AwardDonationAsync(AppDbContext context, DonationRequest request,
         decimal actualWeightKg, Guid actorId)
@@ -18,7 +25,8 @@ public static class DonationPointWriter
                                  x.DonationRequestId == request.Id && x.Type == type);
         if (alreadyAwarded) return 0;
 
-        var points = (int)decimal.Round(actualWeightKg * PointsPerKg, 0, MidpointRounding.AwayFromZero);
+        var pointsPerKg = await GetPointsPerKgAsync(context);
+        var points = (int)decimal.Round(actualWeightKg * pointsPerKg, 0, MidpointRounding.AwayFromZero);
         if (points <= 0) return 0;
         var donor = await context.Users.FirstAsync(x => x.Id == request.DonorId && x.IsActive != false);
         donor.DonationPoint += points;
@@ -27,7 +35,7 @@ public static class DonationPointWriter
         {
             Id = Guid.NewGuid(), UserId = donor.Id, DonationRequestId = request.Id,
             Points = points, BalanceAfter = donor.DonationPoint, WeightKg = actualWeightKg,
-            Type = type, Description = $"Cộng điểm từ đơn {request.RequestCode}: {actualWeightKg:0.##} kg × {PointsPerKg} điểm/kg",
+            Type = type, Description = $"Cộng điểm từ đơn {request.RequestCode}: {actualWeightKg:0.##} kg × {pointsPerKg} điểm/kg",
             OccurredAt = DateTime.UtcNow, CreateAt = DateTime.UtcNow, CreatedBy = actorId, IsActive = true
         });
         return points;

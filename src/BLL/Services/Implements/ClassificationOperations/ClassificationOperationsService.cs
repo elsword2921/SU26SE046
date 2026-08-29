@@ -27,9 +27,12 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
                 || x.Status == "AwaitingClassificationCount" || x.Status == "ReadyForClassification"
                 || x.Status == "Classifying"
                 || (x.Status == "InClassifiedArea" && x.ClassifiedItems.Any(item =>
-                    item.IsActive != false && item.ClassifiedBatch != null
-                    && item.ClassifiedBatch.IsActive != false
-                    && item.ClassifiedBatch.Status == "Open"))))
+                    item.IsActive != false && (!item.ClassifiedBatchId.HasValue
+                    || (item.ClassifiedBatch != null && item.ClassifiedBatch.IsActive != false
+                    && (item.ClassifiedBatch.Status == "Draft"
+                        || item.ClassifiedBatch.Status == "ReadyForPlacement"
+                        || item.ClassifiedBatch.Status == "PlacedInClassifiedArea"
+                        || item.ClassifiedBatch.Status == "Open")))))))
             .OrderByDescending(x => x.IntakeDate)
             .Select(x => new ClassificationBatchSummaryDto(x.Id, x.BatchCode, x.RouteName, x.IntakeDate,
                 x.TotalWeight, x.Status,
@@ -129,6 +132,11 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
 
         var batch = await RequireBatch(batchId);
         await RequireActiveClassificationTeamAsync(staffId, batch);
+        var handedOffWeight = decimal.Round(batch.TotalWeight, 2, MidpointRounding.AwayFromZero);
+        var countedWeight = decimal.Round(dto.TotalWeightKg, 2, MidpointRounding.AwayFromZero);
+        if (countedWeight != handedOffWeight)
+            throw new InvalidOperationException(
+                $"Tổng khối lượng thực tế phải đúng bằng {handedOffWeight:0.##} kg do Receiving Staff bàn giao.");
         if (batch.Status is not ("AwaitingClassificationCount" or "ReadyForClassification"))
             throw new InvalidOperationException("Only a received batch that has not started classification can be counted.");
         if (await context.ClassifiedItems.AnyAsync(x => x.BatchId == batchId && x.IsActive != false))
@@ -136,7 +144,7 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
 
         var now = DateTime.UtcNow;
         batch.CountedItemCount = dto.ItemCount;
-        batch.CountedTotalWeight = decimal.Round(dto.TotalWeightKg, 2);
+        batch.CountedTotalWeight = countedWeight;
         batch.CountingNotes = string.IsNullOrWhiteSpace(dto.Notes) ? null : dto.Notes.Trim();
         batch.CountedAt = now;
         batch.CountedByStaffId = staffId;
@@ -171,12 +179,6 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
             ImageUrls = dto.ImageUrls, Notes = dto.Notes, ClassifiedByStaffId = staffId, ClassifiedAt = DateTime.UtcNow,
             CreateAt = DateTime.UtcNow, CreatedBy = staffId
         };
-        var groupedBatch = await GetOrCreateGroupedBatchAsync(batch, item, categorySelection, staffId);
-        item.ClassifiedBatchId = groupedBatch.Id;
-        await LinkBatchProvenanceAsync(groupedBatch.Id, batchId, staffId);
-        groupedBatch.TotalItem++;
-        groupedBatch.UpdateAt = DateTime.UtcNow;
-        groupedBatch.UpdatedBy = staffId;
         context.ClassifiedItems.Add(item);
         context.InspectionAnswers.AddRange(dto.Answers.Select(x => new InspectionAnswer
         {
@@ -198,11 +200,8 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
             .Include(x => x.InspectionAnswers)
             .FirstOrDefaultAsync(x => x.Id == itemId && x.BatchId == batchId && x.IsActive != false)
             ?? throw new InvalidOperationException("Classified item not found.");
-        var oldGroup = item.ClassifiedBatchId.HasValue
-            ? await context.ClassifiedBatches.FirstOrDefaultAsync(x => x.Id == item.ClassifiedBatchId.Value)
-            : null;
-        if (oldGroup is not null && oldGroup.Status != "Open")
-            throw new InvalidOperationException("This item has already entered the warehouse workflow.");
+        if (item.ClassifiedBatchId.HasValue)
+            throw new InvalidOperationException("Remove the item from its classified batch before editing it.");
 
         var selection = await ResolveCategoriesAsync(dto);
         var (rating, grade) = await ResolveConditionGradeAsync(dto);
@@ -225,23 +224,6 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
         item.Notes = dto.Notes;
         item.UpdateAt = DateTime.UtcNow;
         item.UpdatedBy = staffId;
-
-        var newGroup = await GetOrCreateGroupedBatchAsync(batch, item, selection, staffId);
-        if (oldGroup?.Id != newGroup.Id)
-        {
-            if (oldGroup is not null)
-            {
-                oldGroup.TotalItem = Math.Max(0, oldGroup.TotalItem - 1);
-                oldGroup.UpdateAt = DateTime.UtcNow;
-                oldGroup.UpdatedBy = staffId;
-                if (oldGroup.TotalItem == 0) oldGroup.IsActive = false;
-            }
-            newGroup.TotalItem++;
-            newGroup.UpdateAt = DateTime.UtcNow;
-            newGroup.UpdatedBy = staffId;
-            item.ClassifiedBatchId = newGroup.Id;
-            await LinkBatchProvenanceAsync(newGroup.Id, batchId, staffId);
-        }
 
         var answerUpdates = dto.Answers
             .GroupBy(x => x.QuestionId)
@@ -279,11 +261,8 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
         var item = await context.ClassifiedItems.Include(x => x.InspectionAnswers)
             .FirstOrDefaultAsync(x => x.Id == itemId && x.BatchId == batchId && x.IsActive != false)
             ?? throw new InvalidOperationException("Classified item not found.");
-        var group = item.ClassifiedBatchId.HasValue
-            ? await context.ClassifiedBatches.FirstOrDefaultAsync(x => x.Id == item.ClassifiedBatchId.Value)
-            : null;
-        if (group is not null && group.Status != "Open")
-            throw new InvalidOperationException("This item has already entered the warehouse workflow.");
+        if (item.ClassifiedBatchId.HasValue)
+            throw new InvalidOperationException("Remove the item from its classified batch before deleting it.");
         var now = DateTime.UtcNow;
         item.IsActive = false;
         item.UpdateAt = now;
@@ -294,19 +273,14 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
             answer.UpdateAt = now;
             answer.UpdatedBy = staffId;
         }
-        if (group is not null)
-        {
-            group.TotalItem = Math.Max(0, group.TotalItem - 1);
-            group.UpdateAt = now;
-            group.UpdatedBy = staffId;
-            if (group.TotalItem == 0) group.IsActive = false;
-        }
         await context.SaveChangesAsync();
     }
 
-    public async Task<IReadOnlyList<GroupedClassifiedBatchDto>> GetGroupedBatchesAsync(DateTime? date)
+    public async Task<IReadOnlyList<GroupedClassifiedBatchDto>> GetGroupedBatchesAsync(Guid staffId, DateTime? date)
     {
-        var query = context.ClassifiedBatches.AsNoTracking().Where(x => x.IsActive != false);
+        var warehouseId = await RequireStaffWarehouseIdAsync(staffId);
+        var query = context.ClassifiedBatches.AsNoTracking()
+            .Where(x => x.WarehouseId == warehouseId && x.IsActive != false);
         if (date.HasValue) query = query.Where(x => x.ClassificationDate == date.Value.Date);
         return await query.OrderByDescending(x => x.ClassificationDate).ThenBy(x => x.BatchCode)
             .Select(x => new GroupedClassifiedBatchDto(x.Id, x.BatchCode, x.ClassificationDate,
@@ -336,7 +310,8 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
             .OrderBy(x => x.AreaName).ToListAsync();
         var areaIds = areas.Select(x => x.Id).ToList();
         var query = context.ClassifiedBatches.AsNoTracking()
-            .Where(x => x.WarehouseId == warehouse.Id && x.Status == "Open"
+            .Where(x => x.WarehouseId == warehouse.Id
+                && (x.Status == "ReadyForPlacement" || x.Status == "PlacedInClassifiedArea" || x.Status == "Open")
                 && x.IsActive != false);
         if (date.HasValue) query = query.Where(x => x.ClassificationDate == date.Value.Date);
         var batches = await query.Include(x => x.DonationRequestSources.Where(s => s.IsActive != false))
@@ -361,13 +336,14 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
                 || !x.GroupId.HasValue).Select(Map).ToList());
     }
 
-    public async Task<GroupedClassifiedBatchDetailDto?> GetGroupedBatchAsync(Guid groupedBatchId)
+    public async Task<GroupedClassifiedBatchDetailDto?> GetGroupedBatchAsync(Guid staffId, Guid groupedBatchId)
     {
+        var warehouseId = await RequireStaffWarehouseIdAsync(staffId);
         var group = await context.ClassifiedBatches.AsNoTracking()
             .Include(x => x.Items.Where(i => i.IsActive != false))
             .Include(x => x.DonationRequestSources.Where(s => s.IsActive != false))
                 .ThenInclude(x => x.DonationRequest)
-            .FirstOrDefaultAsync(x => x.Id == groupedBatchId && x.IsActive != false);
+            .FirstOrDefaultAsync(x => x.Id == groupedBatchId && x.WarehouseId == warehouseId && x.IsActive != false);
         return group is null ? null : new GroupedClassifiedBatchDetailDto(group.Id, group.BatchCode,
             group.ClassificationDate, group.FabricType, group.GarmentGroup, group.ClothingType,
             group.Gender, group.TargetUser, group.Size, Grade(group.ConditionRating),
@@ -378,14 +354,157 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
             group.Items.OrderBy(x => x.ClassifiedAt).Select(MapItem).ToList());
     }
 
+    public async Task<IReadOnlyList<UnassignedClassifiedItemDto>> GetUnassignedItemsAsync(Guid staffId)
+    {
+        var warehouseId = await RequireStaffWarehouseIdAsync(staffId);
+        return await context.ClassifiedItems.AsNoTracking()
+            .Where(x => x.IsActive != false && !x.ClassifiedBatchId.HasValue
+                && x.Batch.WarehouseId == warehouseId)
+            .OrderBy(x => x.ClassifiedAt)
+            .Select(x => new UnassignedClassifiedItemDto(x.Id, x.ItemCode, x.Batch.BatchCode,
+                x.GarmentGroup, x.Gender, x.TargetUser, x.Size,
+                x.ConditionRating == 1 ? "A" : x.ConditionRating == 2 ? "B" : "C",
+                x.ProcessingDirection, x.ClassifiedAt, x.GarmentGroupId, x.GenderId,
+                x.TargetUserId, x.SizeId, x.ConditionGradeId))
+            .ToListAsync();
+    }
+
+    public async Task<GroupedClassifiedBatchDetailDto> CreateManualBatchAsync(
+        Guid staffId, CreateManualClassifiedBatchDto dto)
+    {
+        var warehouseId = await RequireStaffWarehouseIdAsync(staffId);
+        var ids = new[] { dto.GarmentGroupId, dto.GenderId,
+            dto.TargetUserId, dto.ConditionGradeId };
+        if (ids.Any(x => x == Guid.Empty))
+            throw new InvalidOperationException("Select all classified batch attributes.");
+        var categories = await context.Categories.Where(x => ids.Contains(x.Id) && x.IsActive != false).ToListAsync();
+        Category Require(Guid id, string type) => categories.FirstOrDefault(x => x.Id == id && x.Type == type)
+            ?? throw new InvalidOperationException($"The selected {type} category is invalid or inactive.");
+        var group = Require(dto.GarmentGroupId, GarmentGroup);
+        var gender = Require(dto.GenderId, Gender);
+        var target = Require(dto.TargetUserId, TargetUser);
+        var grade = Require(dto.ConditionGradeId, ConditionGrade);
+        var rating = grade.Code.EndsWith("_A", StringComparison.OrdinalIgnoreCase) ? 1
+            : grade.Code.EndsWith("_B", StringComparison.OrdinalIgnoreCase) ? 2 : 3;
+        var now = DateTime.UtcNow;
+        var localDate = VietnamTime.Today;
+        var batch = new ClassifiedBatch
+        {
+            Id = Guid.NewGuid(), WarehouseId = warehouseId, ClassificationDate = localDate,
+            GroupKey = $"MANUAL|{warehouseId}|{Guid.NewGuid():N}",
+            BatchCode = $"CB-{localDate:yyyyMMdd}-{Grade(rating)}-{Guid.NewGuid():N}"[..24].ToUpperInvariant(),
+            GarmentGroupId = group.Id, GenderId = gender.Id, TargetUserId = target.Id,
+            SizeId = null, ConditionGradeId = grade.Id,
+            FabricType = "Nhiều chất liệu", GarmentGroup = group.Name, ClothingType = group.Name,
+            Gender = gender.Name, TargetUser = target.Name, Size = "Nhiều kích cỡ",
+            ConditionRating = rating,
+            ProcessingDirection = rating == 1 ? "Charity" : rating == 2 ? "Recycling" : "Disposal",
+            Status = "Draft", TotalItem = 0, TotalWeight = 0,
+            CreateAt = now, CreatedBy = staffId, IsActive = true
+        };
+        context.ClassifiedBatches.Add(batch);
+        await context.SaveChangesAsync();
+        return (await GetGroupedBatchAsync(staffId, batch.Id))!;
+    }
+
+    public async Task AssignItemsAsync(Guid staffId, Guid groupedBatchId, IReadOnlyList<Guid> itemIds)
+    {
+        var warehouseId = await RequireStaffWarehouseIdAsync(staffId);
+        var ids = itemIds.Where(x => x != Guid.Empty).Distinct().ToList();
+        if (ids.Count == 0) throw new InvalidOperationException("Select at least one item.");
+        var batch = await context.ClassifiedBatches.FirstOrDefaultAsync(x => x.Id == groupedBatchId
+            && x.WarehouseId == warehouseId && x.IsActive != false)
+            ?? throw new InvalidOperationException("Classified batch not found.");
+        if (batch.Status != "Draft")
+            throw new InvalidOperationException("Items can only be added to a draft classified batch.");
+        var items = await context.ClassifiedItems.Include(x => x.Batch)
+            .Where(x => ids.Contains(x.Id) && x.IsActive != false).ToListAsync();
+        if (items.Count != ids.Count) throw new InvalidOperationException("One or more items no longer exist.");
+        if (items.Any(x => x.ClassifiedBatchId.HasValue))
+            throw new InvalidOperationException("One or more items already belong to a classified batch.");
+        if (items.Any(x => x.Batch.WarehouseId != warehouseId))
+            throw new InvalidOperationException("All items must belong to your warehouse.");
+        if (items.Any(x => x.GarmentGroupId != batch.GarmentGroupId
+            || x.GenderId != batch.GenderId || x.TargetUserId != batch.TargetUserId
+            || x.ConditionGradeId != batch.ConditionGradeId))
+            throw new InvalidOperationException("Every item must match all attributes of the classified batch.");
+        foreach (var item in items)
+        {
+            item.ClassifiedBatchId = batch.Id;
+            item.Status = "AssignedToClassifiedBatch";
+            item.UpdateAt = DateTime.UtcNow;
+            item.UpdatedBy = staffId;
+            await LinkBatchProvenanceAsync(batch.Id, item.BatchId, staffId);
+        }
+        batch.TotalItem = await context.ClassifiedItems.CountAsync(x => x.ClassifiedBatchId == batch.Id
+            && x.IsActive != false) + items.Count;
+        batch.UpdateAt = DateTime.UtcNow;
+        batch.UpdatedBy = staffId;
+        await context.SaveChangesAsync();
+    }
+
+    public async Task RemoveItemAsync(Guid staffId, Guid groupedBatchId, Guid itemId)
+    {
+        var warehouseId = await RequireStaffWarehouseIdAsync(staffId);
+        var batch = await context.ClassifiedBatches.FirstOrDefaultAsync(x => x.Id == groupedBatchId
+            && x.WarehouseId == warehouseId && x.IsActive != false)
+            ?? throw new InvalidOperationException("Classified batch not found.");
+        if (batch.Status != "Draft")
+            throw new InvalidOperationException("Items can only be removed from a draft classified batch.");
+        var item = await context.ClassifiedItems.FirstOrDefaultAsync(x => x.Id == itemId
+            && x.ClassifiedBatchId == groupedBatchId && x.IsActive != false)
+            ?? throw new InvalidOperationException("Item not found in this classified batch.");
+        item.ClassifiedBatchId = null;
+        item.Status = "Classified";
+        item.UpdateAt = DateTime.UtcNow;
+        item.UpdatedBy = staffId;
+        batch.TotalItem = Math.Max(0, batch.TotalItem - 1);
+        batch.UpdateAt = DateTime.UtcNow;
+        batch.UpdatedBy = staffId;
+        var stillHasSourceItems = await context.ClassifiedItems.AnyAsync(x => x.Id != item.Id
+            && x.ClassifiedBatchId == groupedBatchId && x.BatchId == item.BatchId && x.IsActive != false);
+        if (!stillHasSourceItems)
+        {
+            var sources = await context.ClassifiedBatchDonationRequests
+                .Where(x => x.ClassifiedBatchId == groupedBatchId && x.IntakeBatchId == item.BatchId
+                    && x.IsActive != false)
+                .ToListAsync();
+            foreach (var source in sources)
+            {
+                source.IsActive = false;
+                source.UpdateAt = DateTime.UtcNow;
+                source.UpdatedBy = staffId;
+            }
+        }
+        await context.SaveChangesAsync();
+    }
+
+    public async Task FinalizeManualBatchAsync(Guid staffId, Guid groupedBatchId)
+    {
+        var warehouseId = await RequireStaffWarehouseIdAsync(staffId);
+        var batch = await context.ClassifiedBatches.Include(x => x.Items)
+            .FirstOrDefaultAsync(x => x.Id == groupedBatchId && x.WarehouseId == warehouseId && x.IsActive != false)
+            ?? throw new InvalidOperationException("Classified batch not found.");
+        if (batch.Status != "Draft")
+            throw new InvalidOperationException("Only a draft classified batch can be finalized.");
+        if (!batch.Items.Any(x => x.IsActive != false))
+            throw new InvalidOperationException("Add at least one item before finalizing the classified batch.");
+        batch.TotalItem = batch.Items.Count(x => x.IsActive != false);
+        batch.Status = "ReadyForPlacement";
+        batch.UpdateAt = DateTime.UtcNow;
+        batch.UpdatedBy = staffId;
+        await context.SaveChangesAsync();
+    }
+
     public async Task SendGroupedBatchToWarehouseAsync(Guid staffId, Guid groupedBatchId)
     {
+        var warehouseId = await RequireStaffWarehouseIdAsync(staffId);
         var batch = await context.ClassifiedBatches
             .Include(x => x.Items)
-            .FirstOrDefaultAsync(x => x.Id == groupedBatchId && x.IsActive != false)
+            .FirstOrDefaultAsync(x => x.Id == groupedBatchId && x.WarehouseId == warehouseId && x.IsActive != false)
             ?? throw new InvalidOperationException("Classified batch not found.");
-        if (batch.Status != "Open")
-            throw new InvalidOperationException("Only an open classified batch can be sent to warehouse.");
+        if (batch.Status is not ("PlacedInClassifiedArea" or "Open"))
+            throw new InvalidOperationException("Only a classified batch placed in the classified area can be sent to warehouse.");
         if (!batch.PlacedInClassificationAreaAt.HasValue)
             throw new InvalidOperationException("Complete classification and place the batch in the classified area first.");
         if (!batch.StorageLocationId.HasValue)
@@ -417,9 +536,10 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
         if (ids.Count == 0)
             throw new InvalidOperationException("Select at least one classified batch.");
 
+        var warehouseId = await RequireStaffWarehouseIdAsync(staffId);
         var batches = await context.ClassifiedBatches
             .Include(x => x.Items)
-            .Where(x => ids.Contains(x.Id) && x.IsActive != false)
+            .Where(x => ids.Contains(x.Id) && x.WarehouseId == warehouseId && x.IsActive != false)
             .ToListAsync();
         if (batches.Count != ids.Count)
             throw new InvalidOperationException("One or more classified batches no longer exist.");
@@ -427,7 +547,7 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
         var now = DateTime.UtcNow;
         var sent = 0;
         var sentBatchIds = new List<Guid>();
-        foreach (var batch in batches.Where(x => x.Status == "Open"))
+        foreach (var batch in batches.Where(x => x.Status == "PlacedInClassifiedArea" || x.Status == "Open"))
         {
             if (!batch.PlacedInClassificationAreaAt.HasValue || !batch.StorageLocationId.HasValue)
                 continue;
@@ -491,34 +611,6 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
         batch.UpdateAt = now;
         batch.UpdatedBy = staffId;
 
-        var groupedBatches = await context.ClassifiedBatches
-            .Where(x => x.Items.Any(i => i.BatchId == batchId && i.IsActive != false) && x.IsActive != false)
-            .ToListAsync();
-        var itemCountsByGroup = await context.ClassifiedItems
-            .Where(x => x.BatchId == batchId && x.IsActive != false && x.ClassifiedBatchId.HasValue)
-            .GroupBy(x => x.ClassifiedBatchId!.Value)
-            .ToDictionaryAsync(x => x.Key, x => x.Count());
-        var remainingWeight = batch.TotalWeight;
-        for (var groupedIndex = 0; groupedIndex < groupedBatches.Count; groupedIndex++)
-        {
-            var groupedBatch = groupedBatches[groupedIndex];
-            if (itemCountsByGroup.TryGetValue(groupedBatch.Id, out var groupedItemCount) && itemCount > 0)
-            {
-                var allocatedWeight = groupedIndex == groupedBatches.Count - 1
-                    ? remainingWeight
-                    : decimal.Round(batch.TotalWeight * groupedItemCount / itemCount, 2,
-                        MidpointRounding.AwayFromZero);
-                groupedBatch.TotalWeight += allocatedWeight;
-                remainingWeight -= allocatedWeight;
-            }
-            groupedBatch.AreaId = null;
-            groupedBatch.GroupId = null;
-            groupedBatch.ClassificationAreaName = null;
-            groupedBatch.PlacedInClassificationAreaAt = null;
-            groupedBatch.PlacedInClassificationAreaByStaffId = null;
-            groupedBatch.UpdateAt = now;
-            groupedBatch.UpdatedBy = staffId;
-        }
         var sourceIds = await context.IntakeBatchDonationRequests.Where(x => x.IntakeBatchId == batchId)
             .Select(x => x.DonationRequestId).ToListAsync();
         await context.DonationRequests.Where(x => sourceIds.Contains(x.Id))
@@ -561,8 +653,8 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
             ?? throw new InvalidOperationException("Classified batch not found.");
         if (batch.WarehouseId != staff.WarehouseId.Value)
             throw new InvalidOperationException("Classified batch is not in your warehouse.");
-        if (batch.Status != "Open")
-            throw new InvalidOperationException("Only an open classified batch can be placed.");
+        if (batch.Status is not ("ReadyForPlacement" or "Open"))
+            throw new InvalidOperationException("Only a classified batch ready for placement can be placed.");
         if (batch.PlacedInClassificationAreaAt.HasValue)
             throw new InvalidOperationException("Classified batch has already been placed.");
         if (dto.ActualWeightKg <= 0)
@@ -592,6 +684,7 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
         batch.PlacedInClassificationAreaAt = placedAt;
         batch.PlacedInClassificationAreaByStaffId = staffId;
         batch.TotalWeight = actualWeightKg;
+        batch.Status = "PlacedInClassifiedArea";
         batch.UpdateAt = placedAt;
         batch.UpdatedBy = staffId;
         group.CurrentKg += actualWeightKg;
@@ -678,7 +771,10 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
                 x.Members.Where(m => m.IsActive != false).Select(m =>
                     new ReceivingTeamMemberDto(m.StaffId, m.Staff.FullName, m.Staff.PhoneNumber)).ToList(),
                 x.ClassificationBatches.Count(b => b.IsActive != false),
-                x.ClassificationBatches.Count(b => b.IsActive != false && b.Status == "InClassifiedArea")))
+                x.ClassificationBatches.Count(b => b.IsActive != false && b.Status == "InClassifiedArea"),
+                x.ClassificationBatches.Where(b => b.IsActive != false).Sum(b => b.TotalWeight),
+                x.ClassificationBatches.Where(b => b.IsActive != false && b.Status == "InClassifiedArea")
+                    .Sum(b => b.TotalWeight)))
             .ToListAsync();
 
         var batchQuery = context.IntakeBatches.AsNoTracking().Where(x => x.IsActive != false
@@ -709,8 +805,8 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
             ?? throw new InvalidOperationException("Classification team not found.");
         if (team.Shift.WarehouseId != batch.WarehouseId)
             throw new InvalidOperationException("Batch and classification team must belong to the same warehouse.");
-        if (team.Status != "Scheduled")
-            throw new InvalidOperationException("Cannot assign a batch after the classification team has started.");
+        if (team.Status is not ("Scheduled" or "InProgress"))
+            throw new InvalidOperationException("Cannot assign a batch to a completed classification team.");
         if (VietnamTime.Now >= team.Shift.ShiftDate.Date.Add(team.Shift.EndTime))
             throw new InvalidOperationException("Cannot assign a batch to an ended shift.");
         if (team.Members.Count(x => x.IsActive != false) is < 1 or > 2)
@@ -728,6 +824,76 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
                 $"Lô {batch.BatchCode} đã được phân công cho {team.TeamName}.",
                 $"/classification/batches/{batch.Id}", managerId);
         await context.SaveChangesAsync();
+    }
+
+    public async Task<AutoBalanceClassificationResultDto> AutoBalanceBatchesAsync(
+        Guid managerId, Guid shiftId)
+    {
+        await using var transaction = await context.Database.BeginTransactionAsync();
+        var shift = await context.Shifts.Include(x => x.Teams.Where(team => team.IsActive != false
+                && team.TeamType == "Classification"))
+                .ThenInclude(team => team.Members.Where(member => member.IsActive != false))
+                    .ThenInclude(member => member.Staff)
+            .Include(x => x.Teams.Where(team => team.IsActive != false
+                && team.TeamType == "Classification"))
+                .ThenInclude(team => team.ClassificationBatches.Where(batch => batch.IsActive != false))
+            .FirstOrDefaultAsync(x => x.Id == shiftId && x.IsActive != false)
+            ?? throw new InvalidOperationException("Classification shift not found.");
+        var now = VietnamTime.Now;
+        if (shift.Status == "Completed" || now >= shift.ShiftDate.Date.Add(shift.EndTime))
+            throw new InvalidOperationException("Cannot dispatch batches to an ended shift.");
+
+        var teams = shift.Teams.Where(team =>
+                (team.Status is "Scheduled" or "InProgress")
+                && team.Members.Count(member => member.IsActive != false) is >= 1 and <= 2)
+            .ToList();
+        if (teams.Count == 0)
+            throw new InvalidOperationException(
+                "Create at least one classification team with one or two members before dispatching.");
+
+        var waitingBatches = await context.IntakeBatches
+            .Where(batch => batch.WarehouseId == shift.WarehouseId && batch.IsActive != false
+                && batch.Status == "AwaitingClassificationAssignment"
+                && !batch.ClassificationTeamId.HasValue)
+            .OrderByDescending(batch => batch.TotalWeight)
+            .ThenBy(batch => batch.SentToClassificationAt)
+            .ToListAsync();
+
+        var loads = teams.ToDictionary(team => team.Id,
+            team => team.ClassificationBatches.Where(batch => batch.IsActive != false)
+                .Sum(batch => batch.TotalWeight));
+        var assignedCounts = teams.ToDictionary(team => team.Id,
+            team => team.ClassificationBatches.Count(batch => batch.IsActive != false));
+
+        foreach (var batch in waitingBatches)
+        {
+            var target = teams.OrderBy(team => loads[team.Id])
+                .ThenBy(team => assignedCounts[team.Id])
+                .ThenBy(team => team.TeamName)
+                .First();
+            batch.ClassificationTeamId = target.Id;
+            batch.ClassificationAssignedAt = now;
+            batch.ClassificationAssignedByManagerId = managerId;
+            batch.Status = "AssignedToClassification";
+            batch.UpdateAt = now;
+            batch.UpdatedBy = managerId;
+            loads[target.Id] += batch.TotalWeight;
+            assignedCounts[target.Id]++;
+            foreach (var member in target.Members.Where(member => member.IsActive != false))
+                NotificationWriter.NotifyUser(context, member.StaffId, "ClassificationBatchAssigned",
+                    "Bạn có lô phân loại mới",
+                    $"Lô {batch.BatchCode} đã được điều phối cho {target.TeamName}.",
+                    $"/classification/batches/{batch.Id}", managerId);
+        }
+
+        await context.SaveChangesAsync();
+        await transaction.CommitAsync();
+        var balances = teams.OrderBy(team => team.TeamName).Select(team =>
+            new ClassificationTeamBalanceDto(team.Id, team.TeamName,
+                assignedCounts[team.Id], decimal.Round(loads[team.Id], 2))).ToList();
+        return new AutoBalanceClassificationResultDto(waitingBatches.Count, 0,
+            balances.Min(team => team.AssignedWeightKg),
+            balances.Max(team => team.AssignedWeightKg), balances);
     }
 
     private async Task RequireActiveClassificationTeamAsync(Guid staffId, IntakeBatch batch)
@@ -813,6 +979,16 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
     private async Task<IntakeBatch> RequireBatch(Guid id) => await context.IntakeBatches
         .FirstOrDefaultAsync(x => x.Id == id && x.IsActive != false)
         ?? throw new InvalidOperationException("Intake batch not found.");
+
+    private async Task<Guid> RequireStaffWarehouseIdAsync(Guid staffId)
+    {
+        var warehouseId = await context.Users.AsNoTracking()
+            .Where(x => x.Id == staffId && x.IsActive != false)
+            .Select(x => x.WarehouseId)
+            .FirstOrDefaultAsync();
+        return warehouseId
+            ?? throw new InvalidOperationException("Classification staff is not assigned to a warehouse.");
+    }
 
     private async Task<ClassifiedBatch> GetOrCreateGroupedBatchAsync(IntakeBatch intakeBatch,
         ClassifiedItem item, CategorySelection selection, Guid staffId)

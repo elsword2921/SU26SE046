@@ -76,6 +76,13 @@ public record GroupedClassifiedBatchDetailDto(Guid Id, string BatchCode, DateTim
 
 public record SendGroupedBatchesToWarehouseDto(IReadOnlyList<Guid> GroupedBatchIds);
 public record SendGroupedBatchesToWarehouseResultDto(int Sent, int Skipped);
+public record CreateManualClassifiedBatchDto(Guid GarmentGroupId, Guid GenderId,
+    Guid TargetUserId, Guid ConditionGradeId);
+public record AssignItemsToClassifiedBatchDto(IReadOnlyList<Guid> ItemIds);
+public record UnassignedClassifiedItemDto(Guid Id, string ItemCode, string IntakeBatchCode,
+    string GarmentGroup, string Gender, string TargetUser, string Size, string ConditionGrade,
+    string ProcessingDirection, DateTime ClassifiedAt, Guid? GarmentGroupId, Guid? GenderId,
+    Guid? TargetUserId, Guid? SizeId, Guid? ConditionGradeId);
 public record PlaceGroupedClassifiedBatchDto(
     Guid AreaId,
     Guid GroupId,
@@ -99,7 +106,7 @@ public record ClassificationStaffOptionDto(Guid Id, string FullName, string User
 public record ClassificationTeamDto(Guid Id, Guid ShiftId, string TeamName, string Status,
     DateTime ShiftDate, TimeSpan StartTime, TimeSpan EndTime, Guid WarehouseId, string WarehouseName,
     DateTime? StartedAt, DateTime? CompletedAt, IReadOnlyList<ReceivingTeamMemberDto> Members,
-    int AssignedBatches, int CompletedBatches);
+    int AssignedBatches, int CompletedBatches, decimal AssignedWeightKg, decimal CompletedWeightKg);
 public record ClassificationManagementBatchDto(Guid Id, string BatchCode, string Status,
     Guid WarehouseId, string WarehouseName, decimal TotalWeight, int DonationRequests,
     Guid? TeamId, string? TeamName, string? CurrentAreaName, DateTime? SentAt);
@@ -108,3 +115,8 @@ public record ClassificationManagementBoardDto(
     IReadOnlyList<ClassificationStaffOptionDto> Staff,
     IReadOnlyList<ClassificationTeamDto> Teams,
     IReadOnlyList<ClassificationManagementBatchDto> Batches);
+public record ClassificationTeamBalanceDto(Guid TeamId, string TeamName, int AssignedBatches,
+    decimal AssignedWeightKg);
+public record AutoBalanceClassificationResultDto(int Assigned, int Skipped,
+    decimal MinimumTeamWeightKg, decimal MaximumTeamWeightKg,
+    IReadOnlyList<ClassificationTeamBalanceDto> Teams);

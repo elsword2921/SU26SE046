@@ -29,6 +29,7 @@ namespace DAL
         public DbSet<VoucherCode> VoucherCodes => Set<VoucherCode>();
         public DbSet<VoucherRedemption> VoucherRedemptions => Set<VoucherRedemption>();
         public DbSet<DonationPointTransaction> DonationPointTransactions => Set<DonationPointTransaction>();
+        public DbSet<DonationPointRule> DonationPointRules => Set<DonationPointRule>();
         public DbSet<AiPromptConfiguration> AiPromptConfigurations => Set<AiPromptConfiguration>();
         public DbSet<Warehouse> Warehouses => Set<Warehouse>();
         public DbSet<WarehouseArea> WarehouseAreas => Set<WarehouseArea>();

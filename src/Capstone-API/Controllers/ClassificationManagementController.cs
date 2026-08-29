@@ -22,5 +22,9 @@ public class ClassificationManagementController(IClassificationOperationsService
         return NoContent();
     }
 
+    [HttpPost("shifts/{shiftId:guid}/auto-balance")]
+    public async Task<IActionResult> AutoBalance(Guid shiftId) =>
+        Ok(await service.AutoBalanceBatchesAsync(CurrentUserId, shiftId));
+
     private Guid CurrentUserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 }

@@ -46,10 +46,10 @@ public class DistributionOperationsService(AppDbContext context, HttpClient ghnC
         foreach (var input in dto.Items)
         {
             var inventory=inventories.Single(x=>x.Id==input.InventoryId); var available=inventory.TotalWeight-inventory.ReservedWeight;
-            if(input.WeightKg<=0||input.WeightKg>available) throw new InvalidOperationException($"Invalid weight for {inventory.Sku}.");
+            if (available <= 0) throw new InvalidOperationException($"Inventory {inventory.Sku} has no available weight.");
             request.Items.Add(new DistributionItem { Id=Guid.NewGuid(), InventoryId=inventory.Id,
                 ConditionRating=inventory.ConditionRating, RequestedQuantity=0,
-                RequestedWeight=Math.Round(input.WeightKg,2), CreateAt=DateTime.UtcNow, IsActive=true });
+                RequestedWeight=Math.Round(available,2), CreateAt=DateTime.UtcNow, IsActive=true });
         }
         context.DistributionRequests.Add(request);
         var managers=await context.Users.Where(x=>x.IsActive!=false&&x.Role.RoleName=="Manager").Select(x=>x.Id).ToListAsync();
@@ -80,11 +80,10 @@ public class DistributionOperationsService(AppDbContext context, HttpClient ghnC
         {
             var inventory = inventories.Single(x => x.Id == input.InventoryId);
             var available = inventory.TotalWeight - inventory.ReservedWeight;
-            if (input.WeightKg <= 0 || input.WeightKg > available)
-                throw new InvalidOperationException($"Invalid weight for {inventory.Sku}.");
+            if (available <= 0) throw new InvalidOperationException($"Inventory {inventory.Sku} has no available weight.");
             request.Items.Add(new DistributionItem { Id = Guid.NewGuid(), InventoryId = inventory.Id,
                 ConditionRating = inventory.ConditionRating, RequestedQuantity = 0,
-                RequestedWeight = Math.Round(input.WeightKg, 2), CreateAt = DateTime.UtcNow, IsActive = true });
+                RequestedWeight = Math.Round(available, 2), CreateAt = DateTime.UtcNow, IsActive = true });
         }
         request.WarehouseId = dto.WarehouseId;
         request.RecipientName = dto.RecipientName.Trim();

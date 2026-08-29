@@ -123,10 +123,12 @@ public class WarehouseOperationsController(IWarehouseOperationsService service) 
         Ok(await service.GetTransactionsAsync(CurrentUserId, warehouseId, type));
 
     [HttpPost("inventory/{inventoryId:guid}/issue")]
+    [Authorize(Roles = "WarehouseStaff")]
     public async Task<IActionResult> Issue(Guid inventoryId, IssueInventoryDto dto)
     { await service.IssueAsync(CurrentUserId, inventoryId, dto); return NoContent(); }
 
     [HttpPost("inventory/{inventoryId:guid}/move")]
+    [Authorize(Roles = "WarehouseStaff")]
     public async Task<IActionResult> Move(Guid inventoryId, MoveInventoryDto dto)
     { await service.MoveAsync(CurrentUserId, inventoryId, dto); return NoContent(); }
 

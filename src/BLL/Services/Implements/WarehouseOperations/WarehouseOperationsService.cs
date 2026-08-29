@@ -652,6 +652,11 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
             ?? throw new InvalidOperationException("Classified batch not found.");
         if (batch.Status != "PendingWarehouseReceipt")
             throw new InvalidOperationException("Only a batch pending warehouse receipt can be confirmed.");
+        var handedOffWeight = decimal.Round(batch.TotalWeight, 2, MidpointRounding.AwayFromZero);
+        var receivedWeight = decimal.Round(dto.ActualWeightKg, 2, MidpointRounding.AwayFromZero);
+        if (receivedWeight != handedOffWeight)
+            throw new InvalidOperationException(
+                $"Khối lượng thực nhận phải đúng bằng {handedOffWeight:0.##} kg do Classification Staff bàn giao.");
 
         var expectedCount = batch.Items.Count(x => x.IsActive != false);
         var actualItemCount = dto.ActualItemCount > 0 ? dto.ActualItemCount : expectedCount;
@@ -660,10 +665,10 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
         batch.WarehouseReceivedAt = DateTime.UtcNow;
         batch.WarehouseReceivedByStaffId = staffId;
         batch.ReceivedItemCount = actualItemCount;
-        batch.ReceivedWeight = dto.ActualWeightKg;
+        batch.ReceivedWeight = receivedWeight;
         batch.WarehouseReceiptNotes = notes;
         batch.TotalItem = actualItemCount;
-        batch.TotalWeight = dto.ActualWeightKg;
+        batch.TotalWeight = receivedWeight;
         batch.UpdateAt = DateTime.UtcNow;
         batch.UpdatedBy = staffId;
 
@@ -678,13 +683,13 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
             GarmentGroup = batch.GarmentGroup, ClothingType = batch.ClothingType,
             Gender = batch.Gender, TargetUser = batch.TargetUser, Size = batch.Size,
             ProcessingDirection = batch.ProcessingDirection, ConditionRating = batch.ConditionRating,
-            Quantity = actualItemCount, TotalWeight = dto.ActualWeightKg,
+            Quantity = actualItemCount, TotalWeight = receivedWeight,
             Status = "AwaitingPutaway", CreateAt = DateTime.UtcNow, CreatedBy = staffId
         };
         context.Inventories.Add(inventory);
         AddTransaction(staffId, batch.WarehouseId, "RECEIPT", "ClassifiedBatch", batch.Id,
-            notes, inventory, actualItemCount, dto.ActualWeightKg, 0, actualItemCount,
-            0, dto.ActualWeightKg, null, null);
+            notes, inventory, actualItemCount, receivedWeight, 0, actualItemCount,
+            0, receivedWeight, null, null);
         var sourceIds = await context.ClassifiedBatchDonationRequests.Where(x => x.ClassifiedBatchId == batch.Id)
             .Select(x => x.DonationRequestId).ToListAsync();
         var actor = await NotificationWriter.ActorNameAsync(context, staffId);

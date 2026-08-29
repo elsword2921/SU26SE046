@@ -4,7 +4,7 @@ public record DistributionCatalogItemDto(Guid InventoryId, Guid ClassifiedBatchI
     string Grade, int AvailableQuantity, decimal AvailableWeight, List<DistributionCatalogImageDto> Items);
 public record DistributionCatalogImageDto(string ItemCode, string ClothingType, string FabricType,
     string Gender, string TargetUser, string Size, List<string> ImageUrls, string? Notes);
-public record CreateDistributionItemDto(Guid InventoryId, decimal WeightKg);
+public record CreateDistributionItemDto(Guid InventoryId);
 public record CreateDistributionRequestDto(Guid WarehouseId, string RecipientName, string RecipientPhone,
     string ToAddress, string? Notes, List<CreateDistributionItemDto> Items);
 public record ApproveDistributionDto(bool Approved, string? Notes);
