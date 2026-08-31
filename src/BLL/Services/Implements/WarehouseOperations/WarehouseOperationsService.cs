@@ -295,7 +295,7 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
         var current = inventory.Sum(x => x.TotalWeight) + stagingWeight;
         return new WarehouseDashboardDto(pending, putaway, stored,
             inventory.Sum(x => Math.Max(0, x.Quantity - x.ReservedQuantity)),
-            inventory.Count(x => Math.Max(0, x.Quantity - x.ReservedQuantity) > 0),
+            inventory.Count(x => Math.Max(0, x.TotalWeight - x.ReservedWeight) > 0),
             inventory.Sum(x => Math.Max(0, x.TotalWeight - x.ReservedWeight)),
             capacity <= 0 ? 0 : Math.Round(current / capacity * 100, 2),
             current, capacity);
