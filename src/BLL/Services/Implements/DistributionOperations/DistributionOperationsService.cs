@@ -8,6 +8,7 @@ using Microsoft.Extensions.Configuration;
 using System.Net.Http.Json;
 using System.Net.Http;
 using System.Text.Json;
+using System.Data;
 
 namespace BLL.Services.Implements.DistributionOperations;
 
@@ -22,9 +23,18 @@ public class DistributionOperationsService(AppDbContext context, HttpClient ghnC
                 && x.TotalWeight > x.ReservedWeight);
         if (warehouseId.HasValue) query = query.Where(x => x.WarehouseId == warehouseId);
         var rows = await query.OrderBy(x => x.Sku).ToListAsync();
+        var rowIds = rows.Select(x => x.Id).ToList();
+        var lockedIds = (await context.DistributionItems.AsNoTracking()
+            .Where(item => rowIds.Contains(item.InventoryId) && item.IsActive != false
+                && item.DistributionRequest.IsActive != false
+                && item.DistributionRequest.Status != "Rejected"
+                && item.DistributionRequest.Status != "Cancelled")
+            .Select(item => item.InventoryId).Distinct().ToListAsync()).ToHashSet();
         var items = rows.Select(x => new DistributionCatalogItemDto(x.Id, x.ClassifiedBatchId!.Value,
             x.ClassifiedBatch!.BatchCode, x.Sku, x.ClothingType, x.FabricType, x.Gender, x.TargetUser, x.Size,
             Grade(x.ConditionRating), x.Quantity - x.ReservedQuantity, x.TotalWeight - x.ReservedWeight,
+            lockedIds.Contains(x.Id), lockedIds.Contains(x.Id)
+                ? "Batch đang được giữ cho một yêu cầu phân phối khác." : null,
             x.ClassifiedBatch.Items.Where(i => i.IsActive != false).Select(i => new DistributionCatalogImageDto(
                 i.ItemCode, i.ClothingType, i.FabricType, i.Gender, i.TargetUser, i.Size, i.ImageUrls ?? [], i.Notes)).ToList())).ToList();
         return new { warehouses, items };
@@ -32,10 +42,19 @@ public class DistributionOperationsService(AppDbContext context, HttpClient ghnC
 
     public async Task<Guid> CreateAsync(Guid organizationId, CreateDistributionRequestDto dto)
     {
+        await using var tx = await context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
         ValidateRequest(dto);
         if (dto.Items.Count == 0) throw new InvalidOperationException("Select at least one batch.");
         var ids = dto.Items.Select(x => x.InventoryId).Distinct().ToList();
         if (ids.Count != dto.Items.Count) throw new InvalidOperationException("A batch can only appear once.");
+        var lockedIds = await context.DistributionItems
+            .Where(item => ids.Contains(item.InventoryId) && item.IsActive != false
+                && item.DistributionRequest.IsActive != false
+                && item.DistributionRequest.Status != "Rejected"
+                && item.DistributionRequest.Status != "Cancelled")
+            .Select(item => item.InventoryId).Distinct().ToListAsync();
+        if (lockedIds.Count > 0)
+            throw new InvalidOperationException("One or more batches already belong to another distribution request.");
         var inventories = await context.Inventories.Where(x => ids.Contains(x.Id) && x.IsActive != false
             && x.WarehouseId == dto.WarehouseId && x.ProcessingDirection == "Charity" && x.Status == "Available").ToListAsync();
         if (inventories.Count != ids.Count) throw new InvalidOperationException("One or more batches are unavailable or belong to another warehouse.");
@@ -56,11 +75,14 @@ public class DistributionOperationsService(AppDbContext context, HttpClient ghnC
         foreach(var id in managers) NotificationWriter.NotifyUser(context,id,"DistributionRequested","Yêu cầu nhận đồ từ thiện mới",
             $"Tổ chức {request.RecipientName} vừa tạo yêu cầu gồm {request.Items.Sum(x=>x.RequestedWeight):0.##} kg.",
             $"/manager/distributions?requestId={request.Id}",organizationId);
-        await context.SaveChangesAsync(); return request.Id;
+        await context.SaveChangesAsync();
+        await tx.CommitAsync();
+        return request.Id;
     }
 
     public async Task UpdateAsync(Guid organizationId, Guid id, CreateDistributionRequestDto dto)
     {
+        await using var tx = await context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
         ValidateRequest(dto);
         var request = await context.DistributionRequests.Include(x => x.Items)
             .FirstOrDefaultAsync(x => x.Id == id && x.UserId == organizationId && x.IsActive != false)
@@ -70,6 +92,14 @@ public class DistributionOperationsService(AppDbContext context, HttpClient ghnC
         if (dto.Items.Count == 0) throw new InvalidOperationException("Select at least one batch.");
         var ids = dto.Items.Select(x => x.InventoryId).Distinct().ToList();
         if (ids.Count != dto.Items.Count) throw new InvalidOperationException("A batch can only appear once.");
+        var lockedIds = await context.DistributionItems
+            .Where(item => ids.Contains(item.InventoryId) && item.DistributionRequestId != id
+                && item.IsActive != false && item.DistributionRequest.IsActive != false
+                && item.DistributionRequest.Status != "Rejected"
+                && item.DistributionRequest.Status != "Cancelled")
+            .Select(item => item.InventoryId).Distinct().ToListAsync();
+        if (lockedIds.Count > 0)
+            throw new InvalidOperationException("One or more batches already belong to another distribution request.");
         var inventories = await context.Inventories.Where(x => ids.Contains(x.Id) && x.IsActive != false
             && x.WarehouseId == dto.WarehouseId && x.ProcessingDirection == "Charity" && x.Status == "Available").ToListAsync();
         if (inventories.Count != ids.Count) throw new InvalidOperationException("One or more batches are unavailable or belong to another warehouse.");
@@ -96,6 +126,7 @@ public class DistributionOperationsService(AppDbContext context, HttpClient ghnC
             "Yêu cầu nhận đồ từ thiện đã cập nhật", $"Tổ chức {request.RecipientName} đã chỉnh sửa yêu cầu {request.RequestCode}.",
             $"/manager/distributions?requestId={request.Id}", organizationId);
         await context.SaveChangesAsync();
+        await tx.CommitAsync();
     }
 
     public async Task DeleteAsync(Guid organizationId, Guid id)

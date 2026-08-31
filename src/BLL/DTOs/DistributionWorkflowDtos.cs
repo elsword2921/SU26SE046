@@ -1,7 +1,8 @@
 namespace BLL.DTOs;
 public record DistributionCatalogItemDto(Guid InventoryId, Guid ClassifiedBatchId, string BatchCode,
     string Sku, string ClothingType, string FabricType, string Gender, string TargetUser, string Size,
-    string Grade, int AvailableQuantity, decimal AvailableWeight, List<DistributionCatalogImageDto> Items);
+    string Grade, int AvailableQuantity, decimal AvailableWeight, bool IsLocked, string? LockReason,
+    List<DistributionCatalogImageDto> Items);
 public record DistributionCatalogImageDto(string ItemCode, string ClothingType, string FabricType,
     string Gender, string TargetUser, string Size, List<string> ImageUrls, string? Notes);
 public record CreateDistributionItemDto(Guid InventoryId);
