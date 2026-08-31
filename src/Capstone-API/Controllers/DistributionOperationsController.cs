@@ -47,8 +47,13 @@ public class DistributionOperationsController(DistributionOperationsService serv
     {
         var token = configuration["Ghn:Token"] ?? configuration["GHN:Key"]
             ?? throw new InvalidOperationException("GHN Token is not configured.");
+        var configuredEndpoint = configuration["Ghn:Endpoint"] ?? configuration["GHN:Endpoint"]
+            ?? "https://dev-online-gateway.ghn.vn/shiip/public-api/";
+        var apiRoot = configuredEndpoint.TrimEnd('/');
+        if (apiRoot.EndsWith("/v2", StringComparison.OrdinalIgnoreCase))
+            apiRoot = apiRoot[..^3];
         var client = httpClientFactory.CreateClient();
-        client.BaseAddress = new Uri("https://online-gateway.ghn.vn/shiip/public-api/master-data/");
+        client.BaseAddress = new Uri($"{apiRoot}/master-data/");
         client.DefaultRequestHeaders.Add("Token", token);
         using var response = body is null
             ? await client.GetAsync(path)

@@ -66,7 +66,12 @@ builder.Services.AddScoped<IManagerDashboardService, ManagerDashboardService>();
 builder.Services.AddScoped<IManagerAccountService, ManagerAccountService>();
 builder.Services.AddScoped<IVoucherService, VoucherService>();
 builder.Services.AddHttpClient<DistributionOperationsService>(client =>
-    client.BaseAddress = new Uri("https://dev-online-gateway.ghn.vn/shiip/public-api/"));
+{
+    var endpoint = (builder.Configuration["Ghn:Endpoint"] ?? builder.Configuration["GHN:Endpoint"]
+        ?? "https://dev-online-gateway.ghn.vn/shiip/public-api/").TrimEnd('/');
+    if (endpoint.EndsWith("/v2", StringComparison.OrdinalIgnoreCase)) endpoint = endpoint[..^3];
+    client.BaseAddress = new Uri($"{endpoint}/");
+});
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
 builder.Services.AddEndpointsApiExplorer();
