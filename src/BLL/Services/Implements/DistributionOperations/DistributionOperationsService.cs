@@ -85,7 +85,8 @@ public class DistributionOperationsService(AppDbContext context, HttpClient ghnC
         var organization = await context.Users.Include(x => x.Role).FirstOrDefaultAsync(x => x.Id == dto.OrganizationId && x.IsActive != false)
             ?? throw new KeyNotFoundException("Recycling or disposal organization not found.");
         var processingDirection = GetProcessingDirection(organization.Role.RoleName);
-        ValidateRequest(new CreateDistributionRequestDto(dto.WarehouseId, organization.FullName, organization.PhoneNumber, organization.Address, dto.Notes, dto.Items));
+        ValidateRequest(new CreateDistributionRequestDto(dto.WarehouseId, organization.FullName, organization.PhoneNumber,
+            organization.Address, dto.Notes, dto.Items.Select(x => new CreateDistributionItemDto(x.InventoryId)).ToList()));
         if (dto.Items.Count == 0) throw new InvalidOperationException("Select at least one batch.");
         var ids = dto.Items.Select(x => x.InventoryId).Distinct().ToList();
         if (ids.Count != dto.Items.Count)throw new InvalidOperationException("A batch can only appear once.");
