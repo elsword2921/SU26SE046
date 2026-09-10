@@ -4,6 +4,7 @@ using DAL;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DAL.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260908134031_AddProcessingOperations")]
+    partial class AddProcessingOperations
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1791,9 +1794,6 @@ namespace DAL.Migrations
                     b.Property<Guid?>("ApprovedByManagerId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<Guid?>("ApprovedByOrganizationId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.Property<string>("CarrierName")
                         .HasColumnType("nvarchar(max)");
 
@@ -1804,9 +1804,6 @@ namespace DAL.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<Guid?>("CreatedBy")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid?>("CreatedByUserId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTime?>("DeleteAt")
@@ -1824,12 +1821,6 @@ namespace DAL.Migrations
                     b.Property<Guid?>("IssuedByStaffId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<string>("ManagerRejectionReason")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime?>("ManagerRespondedAt")
-                        .HasColumnType("datetime2");
-
                     b.Property<string>("OperationCode")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -1846,12 +1837,6 @@ namespace DAL.Migrations
                     b.Property<DateTime?>("OrganizationReceivedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<string>("OrganizationRejectionReason")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime?>("OrganizationRespondedAt")
-                        .HasColumnType("datetime2");
-
                     b.Property<DateTime?>("OutputReturnedAt")
                         .HasColumnType("datetime2");
 
@@ -1861,17 +1846,17 @@ namespace DAL.Migrations
                     b.Property<DateTime?>("ProcessingStartedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<DateTime?>("RejectedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid?>("RejectedByManagerId")
-                        .HasColumnType("uniqueidentifier");
+                    b.Property<string>("RejectionReason")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("RequestNotes")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("RequestedAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("RequestedByStaffId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -1894,10 +1879,6 @@ namespace DAL.Migrations
 
                     b.HasIndex("ApprovedByManagerId");
 
-                    b.HasIndex("ApprovedByOrganizationId");
-
-                    b.HasIndex("CreatedByUserId");
-
                     b.HasIndex("IssuedByStaffId");
 
                     b.HasIndex("OperationCode")
@@ -1905,7 +1886,7 @@ namespace DAL.Migrations
 
                     b.HasIndex("OrganizationId");
 
-                    b.HasIndex("RejectedByManagerId");
+                    b.HasIndex("RequestedByStaffId");
 
                     b.HasIndex("WarehouseId");
 
@@ -3662,16 +3643,6 @@ namespace DAL.Migrations
                         .HasForeignKey("ApprovedByManagerId")
                         .OnDelete(DeleteBehavior.Restrict);
 
-                    b.HasOne("DAL.Models.User", "ApprovedByOrganization")
-                        .WithMany()
-                        .HasForeignKey("ApprovedByOrganizationId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("DAL.Models.User", "CreatedByUser")
-                        .WithMany()
-                        .HasForeignKey("CreatedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("DAL.Models.User", "IssuedByStaff")
                         .WithMany()
                         .HasForeignKey("IssuedByStaffId")
@@ -3683,9 +3654,9 @@ namespace DAL.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("DAL.Models.User", "RejectedByManager")
+                    b.HasOne("DAL.Models.User", "RequestedByStaff")
                         .WithMany()
-                        .HasForeignKey("RejectedByManagerId")
+                        .HasForeignKey("RequestedByStaffId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("DAL.Models.Warehouse", "Warehouse")
@@ -3696,15 +3667,11 @@ namespace DAL.Migrations
 
                     b.Navigation("ApprovedByManager");
 
-                    b.Navigation("ApprovedByOrganization");
-
-                    b.Navigation("CreatedByUser");
-
                     b.Navigation("IssuedByStaff");
 
                     b.Navigation("Organization");
 
-                    b.Navigation("RejectedByManager");
+                    b.Navigation("RequestedByStaff");
 
                     b.Navigation("Warehouse");
                 });

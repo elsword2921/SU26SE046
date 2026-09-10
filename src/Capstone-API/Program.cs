@@ -19,6 +19,8 @@ using BLL.Services.Interfaces.ManagerAccounts;
 using BLL.Services.Implements.DistributionOperations;
 using BLL.Services.Interfaces.Voucher;
 using BLL.Services.Implements.Voucher;
+using BLL.Services.Implements.ProcessingOperations;
+using BLL.Services.Interfaces.ProcessingOperations;
 using DAL;
 using DAL.Repository;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -56,6 +58,7 @@ builder.Services.AddScoped<IDonorRequestService>(provider =>
 builder.Services.AddScoped<IWarehouseService, WarehouseService>();
 builder.Services.AddScoped<IReceivingOperationsService, ReceivingOperationsService>();
 builder.Services.AddScoped<IClassificationOperationsService, ClassificationOperationsService>();
+builder.Services.AddScoped<IProcessingOperationsService, ProcessingOperationsService>();
 builder.Services.AddHttpClient<GeminiClassificationService>(client =>
 {
     client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");

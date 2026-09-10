@@ -17,6 +17,9 @@ namespace DAL
         public DbSet<InspectionAnswer> InspectionAnswers => Set<InspectionAnswer>();
         public DbSet<DistributionRequest> DistributionRequests => Set<DistributionRequest>();
         public DbSet<DistributionItem> DistributionItems => Set<DistributionItem>();
+        public DbSet<ProcessingOperation> ProcessingOperations => Set<ProcessingOperation>();
+        public DbSet<ProcessingOperationInput> ProcessingOperationInputs => Set<ProcessingOperationInput>();
+        public DbSet<ProcessingOperationOutput> ProcessingOperationOutputs => Set<ProcessingOperationOutput>();
         public DbSet<ShipmentStatusHistory> ShipmentStatusHistories => Set<ShipmentStatusHistory>();
         public DbSet<DonationRequest> DonationRequests => Set<DonationRequest>();
         public DbSet<IntakeBatch> IntakeBatches => Set<IntakeBatch>();
@@ -263,6 +266,40 @@ namespace DAL
             modelBuilder.Entity<ShipmentStatusHistory>()
                 .HasOne(x => x.DistributionRequest).WithMany(x => x.ShipmentHistory)
                 .HasForeignKey(x => x.DistributionRequestId).OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<ProcessingOperation>().Property(x => x.OperationCode).HasMaxLength(32);
+            modelBuilder.Entity<ProcessingOperation>().HasIndex(x => x.OperationCode).IsUnique();
+            modelBuilder.Entity<ProcessingOperation>().Property(x => x.OperationType).HasMaxLength(30);
+            modelBuilder.Entity<ProcessingOperation>().Property(x => x.Status).HasMaxLength(40);
+            modelBuilder.Entity<ProcessingOperation>().HasOne(x => x.Warehouse).WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<ProcessingOperation>().HasOne(x => x.Organization).WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<ProcessingOperation>().HasOne(x => x.CreatedByUser).WithMany().HasForeignKey(x => x.CreatedByUserId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<ProcessingOperation>().HasOne(x => x.ApprovedByOrganization).WithMany().HasForeignKey(x => x.ApprovedByOrganizationId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<ProcessingOperation>().HasOne(x => x.ApprovedByManager).WithMany().HasForeignKey(x => x.ApprovedByManagerId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<ProcessingOperation>().HasOne(x => x.IssuedByStaff).WithMany().HasForeignKey(x => x.IssuedByStaffId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<ProcessingOperation>().HasOne(x => x.ApprovedByManager).WithMany().HasForeignKey(x => x.ApprovedByManagerId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<ProcessingOperation>().HasOne(x => x.IssuedByStaff).WithMany().HasForeignKey(x => x.IssuedByStaffId).OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<ProcessingOperationInput>()
+                .HasIndex(x => new
+                {
+                    x.ProcessingOperationId,
+                    x.InventoryId
+                })
+                .IsUnique();
+            modelBuilder.Entity<ProcessingOperationInput>().HasOne(x => x.ProcessingOperation).WithMany(x => x.Inputs)
+                .HasForeignKey(x => x.ProcessingOperationId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<ProcessingOperationInput>().HasOne(x => x.Inventory).WithMany().HasForeignKey(x => x.InventoryId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<ProcessingOperationInput>().HasOne(x => x.ClassifiedBatch).WithMany().HasForeignKey(x => x.ClassifiedBatchId).OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<ProcessingOperationOutput>().Property(x => x.OutputType).HasMaxLength(40);
+            modelBuilder.Entity<ProcessingOperationOutput>().HasOne(x => x.ProcessingOperation).WithMany(x => x.Outputs)
+                .HasForeignKey(x => x.ProcessingOperationId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<ProcessingOperationOutput>().HasOne(x => x.RecordedByStaff).WithMany()
+                .HasForeignKey(x => x.RecordedByStaffId).OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<ClassifiedBatch>().HasOne(x => x.ProcessingOperationOutput).WithMany(x => x.ClassifiedBatches)
+                .HasForeignKey(x => x.ProcessingOperationOutputId).OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<DonationRequest>()
                 .HasOne(x => x.Donor)
@@ -601,6 +638,7 @@ namespace DAL
             public static readonly Guid ReceivingStaffId = Guid.Parse("55555555-5555-5555-5555-555555555555");
             public static readonly Guid ClassificationStaffId = Guid.Parse("66666666-6666-6666-6666-666666666666");
             public static readonly Guid WarehouseStaffId = Guid.Parse("77777777-7777-7777-7777-777777777777");
+            public static readonly Guid DisposalOrganizationId = Guid.Parse("88888888-8888-8888-8888-888888888888");
             public static readonly Guid System = Guid.Parse("00000000-0000-0000-0000-000000000000");
         }
     }

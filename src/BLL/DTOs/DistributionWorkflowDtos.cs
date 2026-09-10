@@ -8,7 +8,14 @@ public record DistributionCatalogImageDto(string ItemCode, string ClothingType, 
 public record CreateDistributionItemDto(Guid InventoryId);
 public record CreateDistributionRequestDto(Guid WarehouseId, string RecipientName, string RecipientPhone,
     string ToAddress, string? Notes, List<CreateDistributionItemDto> Items);
+public record CreateManagerRequestDto(
+    Guid OrganizationId,
+    Guid WarehouseId,
+    string? Notes,
+    List<CreateDistributionItemDto> Items
+);
 public record ApproveDistributionDto(bool Approved, string? Notes);
+public record RespondDistributionRequestDto(bool Accepted, string? Notes);
 public record IssueDistributionDto(string? Notes);
 public record CreateGhnShipmentDto(int PaymentTypeId, string? RequiredNote, int ToDistrictId,
     string ToWardCode, string FromName, string FromPhone, string FromAddress,
