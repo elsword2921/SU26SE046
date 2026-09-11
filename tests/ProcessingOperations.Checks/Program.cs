@@ -175,6 +175,7 @@ try
         Check(conflicted, "stale capacity update cannot overwrite another workflow");
     }
     await WarehouseAreaChecks.Run(Db, manager.Id);
+    await CharityReceiptChecks.Run(Db, warehouse.Id, manager.Id);
     Console.WriteLine("All processing checks passed.");
 }
 finally

@@ -38,6 +38,8 @@ public class DistributionOperationsController(DistributionOperationsService serv
     public async Task<IActionResult> CreateGhn(Guid id,CreateGhnShipmentDto dto){await service.CreateGhnShipmentAsync(UserId,id,dto);return NoContent();}
     [HttpPost("{id:guid}/ghn/refresh"),Authorize(Roles="Manager,WarehouseStaff,CharityOrganization")]
     public async Task<IActionResult> Refresh(Guid id){await service.RefreshGhnAsync(UserId,id);return NoContent();}
+    [HttpPost("{id:guid}/organization/receive"),Authorize(Roles="CharityOrganization")]
+    public async Task<IActionResult> ConfirmReceipt(Guid id){await service.ConfirmReceiptAsync(UserId,id);return NoContent();}
     [HttpGet("ghn/provinces"),Authorize(Roles="WarehouseStaff")]
     public async Task<IActionResult> GhnProvinces() => Ok(await GhnMasterAsync("province", null));
     [HttpGet("ghn/districts"),Authorize(Roles="WarehouseStaff")]

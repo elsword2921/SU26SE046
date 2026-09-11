@@ -309,6 +309,32 @@ public class DistributionOperationsService(AppDbContext context, HttpClient ghnC
         await context.SaveChangesAsync();
     }
 
+    public async Task ConfirmReceiptAsync(Guid organizationId, Guid id)
+    {
+        if (!await context.Users.AnyAsync(x => x.Id == organizationId && x.IsActive != false
+                && x.Role.RoleName == "CharityOrganization"))
+            throw new UnauthorizedAccessException("Only the receiving charity can confirm receipt.");
+        await using var transaction = await context.Database.BeginTransactionAsync();
+        var now = DateTime.UtcNow;
+        var changed = await context.DistributionRequests
+            .Where(x => x.Id == id && x.UserId == organizationId && x.IsActive != false
+                && x.WarehouseIssuedAt != null && (x.Status == "ReadyForGhn" || x.Status == "GhnBooked"
+                    || x.Status == "InTransit" || x.Status == "Delivered" || x.Status == "DeliveryFailed"))
+            .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.Status, "OrganizationReceived")
+                .SetProperty(x => x.ActualDeliveryTime, now).SetProperty(x => x.UpdateAt, now)
+                .SetProperty(x => x.UpdatedBy, organizationId));
+        if (changed != 1)
+            throw new InvalidOperationException("Yêu cầu không thuộc tổ chức, chưa xuất kho hoặc đã xác nhận nhận hàng.");
+        context.ShipmentStatusHistories.Add(new ShipmentStatusHistory
+        {
+            Id = Guid.NewGuid(), DistributionRequestId = id, Status = "OrganizationReceived",
+            Description = "Tổ chức từ thiện đã xác nhận thực nhận hàng.", Source = "Organization",
+            OccurredAt = now, CreateAt = now, CreatedBy = organizationId, IsActive = true
+        });
+        await context.SaveChangesAsync();
+        await transaction.CommitAsync();
+    }
+
     public async Task RefreshGhnAsync(Guid userId, Guid id)
     {
         var request=await context.DistributionRequests.FirstOrDefaultAsync(x=>x.Id==id&&x.GhnOrderCode!=null)
