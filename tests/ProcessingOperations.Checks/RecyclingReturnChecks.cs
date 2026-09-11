@@ -117,7 +117,27 @@ internal static class RecyclingReturnChecks
                 && await db.ClassifiedItems.CountAsync(x => x.BatchId == intakeId) == 1,
                 "carryover preserves counted quantity and classified items");
             Check(await db.ClassificationBatchTransfers.AnyAsync(x => x.IntakeBatchId == intakeId && x.FromTeamId == team.Id && x.ToTeamId == nextTeam.Id), "carryover records previous team, new team and actor");
+            await action(async processing => Check((await processing.GetByIdAsync(managerId, operationId)).Status == "ReturnReceived",
+                "assigned return remains in progress until classification is complete"));
             await service.CompleteBatchAsync(classificationStaff.Id, intakeId);
+            await action(async processing =>
+            {
+                Check((await processing.GetByIdAsync(managerId, operationId)).Status == "Completed",
+                    "reclassified return is completed in detail, including historical ReturnReceived records");
+                Check((await processing.GetListAsync(managerId, "Completed")).Any(x => x.Id == operationId)
+                    && !(await processing.GetListAsync(managerId, "ReturnReceived")).Any(x => x.Id == operationId),
+                    "processing list and status filters agree with reclassification completion");
+            });
+            var additionalOutput = new ProcessingOperationOutput { Id = Guid.NewGuid(), ProcessingOperationId = operationId,
+                OutputType = "RecycledClothing", Quantity = 1, Weight = 1, IsActive = true };
+            db.ProcessingOperationOutputs.Add(additionalOutput);
+            await db.SaveChangesAsync();
+            await action(async processing => Check((await processing.GetByIdAsync(managerId, operationId)).Status == "ReturnReceived",
+                "an output without a classified intake prevents premature completion"));
+            additionalOutput.IsActive = false;
+            await db.SaveChangesAsync();
+            await action(async processing => Check((await processing.GetByIdAsync(managerId, operationId)).Status == "Completed",
+                "inactive outputs do not block completion"));
             var scratch = await service.CreateManualBatchAsync(classificationStaff.Id, new(group.Id, gender.Id, target.Id, grade.Id));
             var gradeB = await db.Categories.SingleAsync(x => x.Code == "GRADE_B");
             await service.UpdateManualBatchAsync(classificationStaff.Id, scratch.Id, new(group.Id, gender.Id, target.Id, gradeB.Id));

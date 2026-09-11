@@ -295,14 +295,15 @@ public partial class ProcessingOperationsService(AppDbContext context, HttpClien
         }
         if (roleName == "WarehouseStaff")
             query = query.Where(x => x.WarehouseId == user.WarehouseId && (x.Status == "Approved" || x.IssuedAt != null));
+        var completedReturns = ReclassifiedOperationIds();
         if (!string.IsNullOrWhiteSpace(status))
         {
             status = status.Trim();
-            query = query.Where(x => x.Status == status);
+            query = query.Where(x => (completedReturns.Contains(x.Id) ? "Completed" : x.Status) == status);
         }
         return await query
             .OrderByDescending(x => x.RequestedAt)
-            .Select(x => new ProcessingOperationListDto(x.Id,x.OperationCode,x.OperationType,x.Status,x.WarehouseId,x.Warehouse.WarehouseName,x.OrganizationId,
+            .Select(x => new ProcessingOperationListDto(x.Id,x.OperationCode,x.OperationType,completedReturns.Contains(x.Id) ? "Completed" : x.Status,x.WarehouseId,x.Warehouse.WarehouseName,x.OrganizationId,
                 x.Organization.FullName,x.RequestedAt,x.Inputs.Count(i => i.IsActive != false),x.Inputs.Where(i => i.IsActive != false).Sum(i => i.RequestedQuantity),
                 x.Inputs.Where(i => i.IsActive != false).Sum(i => i.RequestedWeight)
             ))
@@ -344,7 +345,9 @@ public partial class ProcessingOperationsService(AppDbContext context, HttpClien
         }
         if (roleName == "WarehouseStaff" && user.WarehouseId != operation.WarehouseId)
             throw new AuthenticationException("Yêu cầu thuộc kho khác.");
-        return new ProcessingOperationDetailDto(operation.Id,operation.OperationCode,operation.OperationType,operation.Status,operation.WarehouseId,
+        var effectiveStatus = operation.Status == "ReturnReceived"
+            && await ReclassifiedOperationIds().AnyAsync(id => id == operation.Id) ? "Completed" : operation.Status;
+        return new ProcessingOperationDetailDto(operation.Id,operation.OperationCode,operation.OperationType,effectiveStatus,operation.WarehouseId,
             operation.Warehouse.WarehouseName,operation.OrganizationId,operation.Organization.FullName,operation.CreatedByUserId,operation.ApprovedByOrganizationId,
             operation.ApprovedByManagerId,operation.IssuedByStaffId,operation.RequestedAt,operation.OrganizationRespondedAt,operation.ManagerRespondedAt,
             operation.ApprovedAt,operation.IssuedAt,operation.OrganizationReceivedAt,operation.ProcessingStartedAt,operation.ProcessingCompletedAt,

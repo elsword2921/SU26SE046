@@ -10,6 +10,18 @@ namespace BLL.Services.Implements.ProcessingOperations;
 
 public partial class ProcessingOperationsService
 {
+    // Derive completion from every active output, including returns classified
+    // before this rule was introduced. Missing intake batches are not completed.
+    private IQueryable<Guid> ReclassifiedOperationIds() => context.ProcessingOperations
+        .Where(operation => operation.IsActive != false && operation.OperationType == "Recycling"
+            && operation.Status == "ReturnReceived"
+            && operation.Outputs.Any(output => output.IsActive != false)
+            && !operation.Outputs.Any(output => output.IsActive != false
+                && !context.IntakeBatches.Any(batch => batch.IsActive != false
+                    && batch.ProcessingOperationOutputId == output.Id
+                    && batch.ClassificationCompletedAt != null)))
+        .Select(operation => operation.Id);
+
     private async Task<RecyclingReturnDetailDto> GetReturnDetailAsync(ProcessingOperation operation)
     {
         var batches = await context.IntakeBatches.AsNoTracking().Include(x => x.CurrentArea)

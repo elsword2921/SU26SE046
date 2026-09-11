@@ -150,7 +150,7 @@ try
     await RecyclingReturnChecks.Run(Db, Do, id, warehouse.Id, recycler.Id, stranger.Id, staff.Id, wrongStaff.Id, manager.Id);
     carrier.Status = "ready_to_pick";
     await Do(s => s.RefreshGhnAsync(manager.Id, id));
-    Check((await Run(s => s.GetByIdAsync(manager.Id, id))).Status == "ReturnReceived", "outbound GHN refresh cannot revert return workflow");
+    Check((await Run(s => s.GetByIdAsync(manager.Id, id))).Status == "Completed", "outbound GHN refresh cannot revert completed reclassification");
     var disposalId = await Create(disposal, disposer);
     await Do(s => s.ApproveByOrganizationAsync(disposer.Id, disposalId));
     await Do(s => s.ApproveByManagerAsync(manager.Id, disposalId));
