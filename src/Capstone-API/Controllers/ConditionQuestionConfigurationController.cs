@@ -12,6 +12,21 @@ namespace Capstone_API.Controllers;
 [Authorize(Roles = "Manager")]
 public class ConditionQuestionConfigurationController(AppDbContext context) : ControllerBase
 {
+    [HttpGet("scoring")]
+    public async Task<IActionResult> GetScoring() => Ok(await context.Set<ClassificationScoringRule>()
+        .Where(x => x.Id == 1).Select(x => new ClassificationScoringRulesDto(x.GradeAMinimum, x.GradeBMinimum)).SingleAsync());
+
+    [HttpPut("scoring")]
+    public async Task<IActionResult> UpdateScoring(ClassificationScoringRulesDto dto)
+    {
+        BLL.Common.WeightedClassification.ValidateThresholds(dto.GradeAMinimum, dto.GradeBMinimum);
+        var rule = await context.Set<ClassificationScoringRule>().SingleAsync(x => x.Id == 1);
+        rule.GradeAMinimum = dto.GradeAMinimum;
+        rule.GradeBMinimum = dto.GradeBMinimum;
+        rule.UpdatedAt = DateTime.UtcNow;
+        await context.SaveChangesAsync();
+        return NoContent();
+    }
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<ConditionQuestionConfigDto>>> GetAll() => Ok(
         await context.ConditionQuestions.AsNoTracking().Where(x => x.IsActive != false)
@@ -21,7 +36,7 @@ public class ConditionQuestionConfigurationController(AppDbContext context) : Co
                     .OrderBy(a => a.ConditionRating)
                     .Select(a => new ConditionAnswerConfigDto(a.Id, a.AnswerText,
                         a.ConditionRating == 1 ? "A" : a.ConditionRating == 2 ? "B" : "C"))
-                    .ToList()))
+                    .ToList(), x.Weight))
             .ToListAsync());
 
     [HttpPost]
@@ -41,7 +56,7 @@ public class ConditionQuestionConfigurationController(AppDbContext context) : Co
         }
         var question = new ConditionQuestion
         {
-            Id = Guid.NewGuid(), QuestionText = dto.QuestionText.Trim(), DisplayOrder = dto.DisplayOrder,
+            Id = Guid.NewGuid(), QuestionText = dto.QuestionText.Trim(), DisplayOrder = dto.DisplayOrder, Weight = dto.Weight,
             CreateAt = DateTime.UtcNow, IsActive = true
         };
         context.ConditionQuestions.Add(question);
@@ -74,6 +89,7 @@ public class ConditionQuestionConfigurationController(AppDbContext context) : Co
         }
         question.QuestionText = dto.QuestionText.Trim();
         question.DisplayOrder = dto.DisplayOrder;
+        question.Weight = dto.Weight;
         question.UpdateAt = DateTime.UtcNow;
         var texts = new[] { dto.AnswerA.Trim(), dto.AnswerB.Trim(), dto.AnswerC.Trim() };
         for (var rating = 1; rating <= 3; rating++)
@@ -135,5 +151,7 @@ public class ConditionQuestionConfigurationController(AppDbContext context) : Co
             || string.IsNullOrWhiteSpace(dto.AnswerB) || string.IsNullOrWhiteSpace(dto.AnswerC))
             throw new InvalidOperationException("Question and all A/B/C answers are required.");
         if (dto.DisplayOrder < 1) throw new InvalidOperationException("Display order must be at least 1.");
+        if (dto.Weight <= 0 || dto.Weight > 10000 || decimal.Round(dto.Weight, 2) != dto.Weight)
+            throw new InvalidOperationException("Trọng số phải lớn hơn 0, không quá 10000 và tối đa 2 chữ số thập phân.");
     }
 }

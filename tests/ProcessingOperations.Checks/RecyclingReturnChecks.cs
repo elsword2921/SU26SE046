@@ -90,8 +90,17 @@ internal static class RecyclingReturnChecks
             var gender = Cat("Gender", "MALE"); var target = Cat("TargetUser", "TARGET_ADULT"); var size = Cat("Size", "M");
             var grade = Cat("ConditionGrade", "GRADE_A");
             db.AddRange(fabric, group, clothing, gender, target, size, grade, Cat("ConditionGrade", "GRADE_B"), Cat("ConditionGrade", "GRADE_C"));
+            var question = new ConditionQuestion { Id = Guid.NewGuid(), QuestionText = "Fabric", Weight = 35 };
+            var answer = new ConditionAnswer { Id = Guid.NewGuid(), ConditionQuestion = question, AnswerText = "Intact", ConditionRating = 1 };
+            db.Add(answer);
             await db.SaveChangesAsync();
-            var item = await service.ClassifyItemAsync(classificationStaff.Id, intakeId, new() { FabricTypeId = fabric.Id, GarmentGroupId = group.Id, ClothingTypeId = clothing.Id, GenderId = gender.Id, TargetUserId = target.Id, SizeId = size.Id });
+            var item = await service.ClassifyItemAsync(classificationStaff.Id, intakeId, new() { FabricTypeId = fabric.Id, GarmentGroupId = group.Id, ClothingTypeId = clothing.Id, GenderId = gender.Id, TargetUserId = target.Id, SizeId = size.Id, Answers = [new(question.Id, answer.Id)] });
+            Check(item.WeightedScore == 100 && item.ScoringSnapshot != null, "classification persists weighted score and evidence");
+            var snapshot = item.ScoringSnapshot;
+            question.Weight = 70;
+            await db.SaveChangesAsync();
+            var persisted = await db.ClassifiedItems.AsNoTracking().SingleAsync(x => x.Id == item.Id);
+            Check(persisted.WeightedScore == 100 && persisted.ScoringSnapshot == snapshot && snapshot!.Contains("\"Weight\":35"), "criteria edits preserve historical scoring evidence");
             Check(item.ConditionGrade == "A" && item.ProcessingDirection == "Charity", "recycled clothing receives fresh grade and existing routing");
             var oldShift = new Shift { Id = Guid.NewGuid(), WarehouseId = warehouseId, ShiftName = "Previous day", ShiftDate = VietnamTime.Today.AddDays(-1), EndTime = new TimeSpan(23,59,59), Status = "Completed" };
             var oldTeam = await db.OperationalTeams.SingleAsync(x => x.Id == team.Id);

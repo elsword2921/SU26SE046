@@ -21,6 +21,8 @@ public class ClassifiedItem : BaseEntity
     public string TargetUser { get; set; } = string.Empty;
     public string Size { get; set; } = string.Empty;
     public int ConditionRating { get; set; }
+    public decimal? WeightedScore { get; set; }
+    public string? ScoringSnapshot { get; set; }
     public string ProcessingDirection { get; set; } = string.Empty;
     public string Status { get; set; } = "Classified";
     public List<string>? ImageUrls { get; set; }

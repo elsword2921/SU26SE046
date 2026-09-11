@@ -9,6 +9,7 @@ using Microsoft.Extensions.Configuration;
 
 // Always creates a fresh, isolated LocalDB database; never reads app connection strings.
 var database = "ReThreadsProcessingChecks_" + Guid.NewGuid().ToString("N");
+WeightedScoringChecks.Run();
 var options = new DbContextOptionsBuilder<AppDbContext>()
     .UseSqlServer($"Server=(localdb)\\MSSQLLocalDB;Database={database};Integrated Security=true;TrustServerCertificate=true").Options;
 AppDbContext Db() => new(options);

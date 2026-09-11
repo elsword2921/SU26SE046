@@ -17,7 +17,11 @@ public record ClassificationItemDto(Guid Id, string ItemCode, string FabricType,
     string ClothingType, string Gender, string TargetUser, string Size, string ConditionGrade,
     string ProcessingDirection, IReadOnlyList<string> ImageUrls, string? Notes, DateTime ClassifiedAt,
     Guid? FabricTypeId, Guid? GarmentGroupId, Guid? ClothingTypeId, Guid? GenderId,
-    Guid? TargetUserId, Guid? SizeId, IReadOnlyList<ClassificationAnswerDto> Answers);
+    Guid? TargetUserId, Guid? SizeId, IReadOnlyList<ClassificationAnswerDto> Answers)
+{
+    public decimal? WeightedScore { get; init; }
+    public string? ScoringSnapshot { get; init; }
+}
 
 public record ClassificationBatchDetailDto(Guid Id, string BatchCode, string RouteName,
     DateTime IntakeDate, decimal TotalWeight, string Status, int DonationRequests,
@@ -49,13 +53,16 @@ public class ClassifyItemDto
 
 public record ClassificationOptionDto(Guid Id, string Text, string Grade);
 public record ClassificationQuestionDto(Guid Id, string Text, int DisplayOrder,
-    IReadOnlyList<ClassificationOptionDto> Options);
+    IReadOnlyList<ClassificationOptionDto> Options, decimal Weight = 1);
 public record CategoryOptionDto(Guid Id, string Code, string Name, Guid? ParentId, int SortOrder);
 public record ClassificationCatalogDto(IReadOnlyList<CategoryOptionDto> FabricTypes,
     IReadOnlyList<CategoryOptionDto> GarmentGroups, IReadOnlyList<CategoryOptionDto> ClothingTypes,
     IReadOnlyList<CategoryOptionDto> Genders, IReadOnlyList<CategoryOptionDto> TargetUsers,
     IReadOnlyList<CategoryOptionDto> Sizes, IReadOnlyList<CategoryOptionDto> ConditionGrades,
-    IReadOnlyList<ClassificationQuestionDto> ConditionQuestions);
+    IReadOnlyList<ClassificationQuestionDto> ConditionQuestions)
+{
+    public ClassificationScoringRulesDto ScoringRules { get; init; } = new();
+}
 
 public class AnalyzeClassificationImagesDto
 {

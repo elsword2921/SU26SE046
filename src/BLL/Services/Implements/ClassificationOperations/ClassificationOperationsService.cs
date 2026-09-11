@@ -67,7 +67,9 @@ public partial class ClassificationOperationsService(AppDbContext context) : ICl
             OfType(ClothingType), OfType(Gender), OfType(TargetUser), OfType(Size), OfType(ConditionGrade),
             questions.Select(q => new ClassificationQuestionDto(q.Id, q.QuestionText, q.DisplayOrder,
                 q.Answers.OrderBy(a => a.ConditionRating).Select(a => new ClassificationOptionDto(
-                    a.Id, a.AnswerText, Grade(a.ConditionRating))).ToList())).ToList());
+                    a.Id, a.AnswerText, Grade(a.ConditionRating))).ToList(), q.Weight)).ToList())
+        { ScoringRules = await context.Set<ClassificationScoringRule>().AsNoTracking().Where(x => x.Id == 1)
+            .Select(x => new ClassificationScoringRulesDto(x.GradeAMinimum, x.GradeBMinimum)).SingleAsync() };
     }
 
     public async Task StartBatchAsync(Guid staffId, Guid batchId)
@@ -160,13 +162,13 @@ public partial class ClassificationOperationsService(AppDbContext context) : ICl
         if (classifiedCount >= batch.CountedItemCount.Value)
             throw new InvalidOperationException("All counted items in this batch have already been classified.");
         var categorySelection = await ResolveCategoriesAsync(dto);
-        var (rating, grade) = await ResolveConditionGradeAsync(dto);
+        var (rating, grade, score, snapshot) = await ResolveConditionGradeAsync(dto);
         var item = new ClassifiedItem
         {
             Id = Guid.NewGuid(), BatchId = batchId, ItemCode = $"CI-{VietnamTime.Now:yyyyMMdd}-{Guid.NewGuid():N}"[..20].ToUpperInvariant(),
             FabricTypeId = categorySelection.Fabric.Id, GarmentGroupId = categorySelection.Group.Id,
             ClothingTypeId = categorySelection.Clothing.Id, GenderId = categorySelection.Gender.Id,
-            TargetUserId = categorySelection.Target.Id, SizeId = categorySelection.Size.Id, ConditionGradeId = grade.Id,
+            TargetUserId = categorySelection.Target.Id, SizeId = categorySelection.Size.Id, ConditionGradeId = grade.Id, WeightedScore = score, ScoringSnapshot = snapshot,
             FabricType = categorySelection.Fabric.Name, GarmentGroup = categorySelection.Group.Name,
             ClothingType = categorySelection.Clothing.Name, Gender = categorySelection.Gender.Name,
             TargetUser = categorySelection.Target.Name, Size = categorySelection.Size.Name, ConditionRating = rating,
@@ -199,7 +201,7 @@ public partial class ClassificationOperationsService(AppDbContext context) : ICl
             throw new InvalidOperationException("Remove the item from its classified batch before editing it.");
 
         var selection = await ResolveCategoriesAsync(dto);
-        var (rating, grade) = await ResolveConditionGradeAsync(dto);
+        var (rating, grade, score, snapshot) = await ResolveConditionGradeAsync(dto);
         item.FabricTypeId = selection.Fabric.Id;
         item.GarmentGroupId = selection.Group.Id;
         item.ClothingTypeId = selection.Clothing.Id;
@@ -207,6 +209,8 @@ public partial class ClassificationOperationsService(AppDbContext context) : ICl
         item.TargetUserId = selection.Target.Id;
         item.SizeId = selection.Size.Id;
         item.ConditionGradeId = grade.Id;
+        item.WeightedScore = score;
+        item.ScoringSnapshot = snapshot;
         item.FabricType = selection.Fabric.Name;
         item.GarmentGroup = selection.Group.Name;
         item.ClothingType = selection.Clothing.Name;
@@ -1145,32 +1149,32 @@ public partial class ClassificationOperationsService(AppDbContext context) : ICl
         return result;
     }
 
-    private async Task<(int Rating, Category Grade)> ResolveConditionGradeAsync(ClassifyItemDto dto)
+    private async Task<(int Rating, Category Grade, decimal Score, string Snapshot)> ResolveConditionGradeAsync(ClassifyItemDto dto)
     {
         var questions = await context.ConditionQuestions.Include(x => x.Answers)
             .Where(x => x.IsActive != false).OrderBy(x => x.DisplayOrder).ToListAsync();
         if (dto.Answers.Count != questions.Count
             || dto.Answers.Select(x => x.QuestionId).Distinct().Count() != questions.Count)
             throw new InvalidOperationException("Every condition question must be answered exactly once.");
-        var ratings = new List<int>();
+        var ratings = new List<(decimal Weight, int Rating)>();
+        var evidence = new List<object>();
         foreach (var question in questions)
         {
             var selected = dto.Answers.SingleOrDefault(x => x.QuestionId == question.Id);
             var answer = question.Answers.FirstOrDefault(x => x.Id == selected?.AnswerId && x.IsActive != false)
                 ?? throw new InvalidOperationException("An answer does not belong to its condition question.");
-            ratings.Add(answer.ConditionRating);
+            ratings.Add((question.Weight, answer.ConditionRating));
+            evidence.Add(new { question.Id, question.QuestionText, question.Weight, AnswerId = answer.Id, answer.AnswerText, answer.ConditionRating });
         }
         var rules = await context.Categories.Where(x => x.Type == ConditionGrade && x.IsActive != false)
             .ToListAsync();
-        var gradeB = rules.FirstOrDefault(x => x.Code == "GRADE_B")
-            ?? throw new InvalidOperationException("Grade B is not configured.");
-        var gradeC = rules.FirstOrDefault(x => x.Code == "GRADE_C")
-            ?? throw new InvalidOperationException("Grade C is not configured.");
-        var rating = ratings.Count(x => x == 3) >= Math.Max(1, gradeC.MinimumMatchCount ?? 1) ? 3
-            : ratings.Count(x => x == 2) >= Math.Max(1, gradeB.MinimumMatchCount ?? 2) ? 2 : 1;
+        var thresholds = await context.Set<ClassificationScoringRule>().AsNoTracking().SingleAsync(x => x.Id == 1);
+        var (score, rating) = WeightedClassification.Calculate(ratings, thresholds.GradeAMinimum, thresholds.GradeBMinimum);
+        var snapshot = System.Text.Json.JsonSerializer.Serialize(new { Version = "weighted-average-v1", thresholds.GradeAMinimum,
+            thresholds.GradeBMinimum, AnswerPoints = new { A = 100, B = 50, C = 0 }, Score = score, Rating = rating, Criteria = evidence });
         var grade = rules.FirstOrDefault(x => x.Code == $"GRADE_{Grade(rating)}")
             ?? throw new InvalidOperationException("The condition grade category is not configured.");
-        return (rating, grade);
+        return (rating, grade, score, snapshot);
     }
 
     private sealed record CategorySelection(Category Fabric, Category Group, Category Clothing,
@@ -1184,7 +1188,8 @@ public partial class ClassificationOperationsService(AppDbContext context) : ICl
         x.ProcessingDirection, x.ImageUrls ?? [], x.Notes, x.ClassifiedAt,
         x.FabricTypeId, x.GarmentGroupId, x.ClothingTypeId, x.GenderId, x.TargetUserId, x.SizeId,
         x.InspectionAnswers.Where(a => a.IsActive != false)
-            .Select(a => new ClassificationAnswerDto(a.ConditionQuestionId, a.ConditionAnswerId)).ToList());
+            .Select(a => new ClassificationAnswerDto(a.ConditionQuestionId, a.ConditionAnswerId)).ToList())
+        { WeightedScore = x.WeightedScore, ScoringSnapshot = x.ScoringSnapshot };
     private static ClassificationBatchDetailDto MapBatch(IntakeBatch x) => new(x.Id, x.BatchCode, x.RouteName,
         x.IntakeDate, x.TotalWeight, NormalizeStatus(x.Status), x.IntakeBatchDonationRequests.Count,
         x.CountedItemCount, x.CountedTotalWeight, x.CountingNotes, x.CountedAt,

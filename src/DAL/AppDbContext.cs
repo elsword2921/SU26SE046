@@ -107,6 +107,15 @@ namespace DAL
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<ClassificationScoringRule>(entity =>
+            {
+                entity.Property(x => x.Id).ValueGeneratedNever();
+                entity.Property(x => x.GradeAMinimum).HasPrecision(5, 2);
+                entity.Property(x => x.GradeBMinimum).HasPrecision(5, 2);
+                entity.HasData(new ClassificationScoringRule { Id = 1, GradeAMinimum = 85, GradeBMinimum = 50 });
+            });
+            modelBuilder.Entity<ConditionQuestion>().Property(x => x.Weight).HasPrecision(8, 2).HasDefaultValue(1m);
+            modelBuilder.Entity<ClassifiedItem>().Property(x => x.WeightedScore).HasPrecision(9, 6);
 
             modelBuilder.Entity<User>().HasOne(u => u.Role).WithMany(r => r.Users).HasForeignKey(u => u.RoleId);
             modelBuilder.Entity<AiPromptConfiguration>().HasIndex(x => x.Feature).IsUnique();
