@@ -253,7 +253,7 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
                 .Select(x => new WarehouseStagingBatchDto(x.Id, x.BatchCode, x.Status,
                     x.TotalWeight, x.IntakeDate, x.DonationRequests, x.TeamName,
                     x.CurrentStorageLocationId, x.LocationCode, x.GroupName,
-                    x.WarehouseReceivedAt, x.WarehouseReceivedBy)).ToList());
+                    x.WarehouseReceivedAt, x.WarehouseReceivedBy)).ToList(), area.ProcessingDirection);
         }).ToList();
         // The warehouse total must represent everything physically present in its areas:
         // intake batches in staging areas plus classified inventory in storage areas.
@@ -394,6 +394,7 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
         {
             Id = Guid.NewGuid(), WarehouseId = dto.WarehouseId, AreaName = dto.AreaName.Trim(),
             AreaType = areaType, Description = dto.Description?.Trim(),
+            ProcessingDirection = NormalizeAreaDirection(areaType, dto.ProcessingDirection),
             CapacityKg = dto.CapacityKg, CurrentKg = 0,
             CreateAt = DateTime.UtcNow, CreatedBy = userId, IsActive = true
         };
@@ -433,6 +434,20 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
             .Where(x => x.IsActive != false && x.CurrentAreaId == areaId)
             .SumAsync(x => (decimal?)x.TotalWeight) ?? 0;
         var actualAreaWeight = inventoryWeight + intakeBatchWeight;
+        var direction = NormalizeAreaDirection(areaType, dto.ProcessingDirection);
+        var areaLocations = await context.StorageLocations
+            .Where(x => x.AreaId == areaId && x.IsActive != false).ToListAsync();
+        if (direction != area.ProcessingDirection && Math.Max(area.CurrentKg, actualAreaWeight) > 0)
+            throw new InvalidOperationException("Move all stock out before changing the area's processing direction.");
+        if (direction != area.ProcessingDirection)
+            foreach (var location in areaLocations)
+            {
+                if (location.CurrentWeightKg > 0)
+                    throw new InvalidOperationException("Move all stock out before changing the area's processing direction.");
+                location.PreferredProcessingDirection = direction;
+                location.UpdateAt = DateTime.UtcNow;
+                location.UpdatedBy = userId;
+            }
         if (!string.Equals(area.AreaType, areaType, StringComparison.OrdinalIgnoreCase)
             && Math.Max(area.CurrentKg, actualAreaWeight) > 0)
             throw new InvalidOperationException(
@@ -448,6 +463,7 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
             throw new InvalidOperationException("An active area with this name already exists in the warehouse.");
         area.AreaName = dto.AreaName.Trim();
         area.AreaType = areaType;
+        area.ProcessingDirection = direction;
         area.Description = dto.Description?.Trim();
         area.CapacityKg = dto.CapacityKg;
         area.UpdateAt = DateTime.UtcNow;
@@ -460,12 +476,29 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
         return areaType?.Trim().ToLowerInvariant() switch
         {
             "receiving" => "Receiving",
+            "recycled" => "Recycled",
             "unclassified" => "Unclassified",
             "classified" => "Classified",
             "storage" => "Storage",
             _ => throw new InvalidOperationException(
-                "Area purpose must be Receiving, Unclassified, Classified or Storage.")
+                "Area purpose must be Receiving, Recycled, Unclassified, Classified or Storage.")
         };
+    }
+
+    private static string? NormalizeAreaDirection(string areaType, string? direction)
+    {
+        if (string.IsNullOrWhiteSpace(direction)) return null;
+        if (areaType != "Storage" || direction is not ("Charity" or "Recycling" or "Disposal"))
+            throw new InvalidOperationException("Only storage areas can select Charity, Recycling or Disposal.");
+        return direction;
+    }
+
+    private static string? LocationDirection(WarehouseArea area, string? requested)
+    {
+        if (area.ProcessingDirection is null) return requested?.Trim();
+        if (!string.IsNullOrWhiteSpace(requested) && requested.Trim() != area.ProcessingDirection)
+            throw new InvalidOperationException("Location processing direction must match its area.");
+        return area.ProcessingDirection;
     }
 
     public async Task DeleteAreaAsync(Guid userId, Guid areaId)
@@ -595,7 +628,7 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
             ShelfCode = dto.ShelfCode.Trim().ToUpperInvariant(),
             BinCode = dto.BinCode.Trim().ToUpperInvariant(),
             PreferredGarmentGroup = dto.PreferredGarmentGroup?.Trim(),
-            PreferredProcessingDirection = dto.PreferredProcessingDirection?.Trim(),
+            PreferredProcessingDirection = LocationDirection(group.Area, dto.PreferredProcessingDirection),
             CapacityKg = dto.CapacityKg, CurrentWeightKg = 0, Status = dto.Status,
             CreateAt = DateTime.UtcNow, CreatedBy = userId, IsActive = true
         };
@@ -634,7 +667,7 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
         location.ShelfCode = dto.ShelfCode.Trim().ToUpperInvariant();
         location.BinCode = dto.BinCode.Trim().ToUpperInvariant();
         location.PreferredGarmentGroup = dto.PreferredGarmentGroup?.Trim();
-        location.PreferredProcessingDirection = dto.PreferredProcessingDirection?.Trim();
+        location.PreferredProcessingDirection = LocationDirection(location.AreaGroup!.Area, dto.PreferredProcessingDirection);
         location.CapacityKg = dto.CapacityKg;
         location.Status = dto.Status;
         location.UpdateAt = DateTime.UtcNow;
@@ -879,6 +912,8 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
         await using var transaction = await context.Database.BeginTransactionAsync();
         var inventory = await InventoryForMutation(inventoryId);
         if (inventory.Status != "Available") throw new InvalidOperationException("Inventory is not available for issue.");
+        if (inventory.ProcessingDirection is "Recycling" or "Disposal")
+            throw new InvalidOperationException("Hàng tái chế/tiêu hủy phải xuất qua yêu cầu xử lý đã được duyệt.");
         if (inventory.TotalWeight - inventory.ReservedWeight < dto.WeightKg)
             throw new InvalidOperationException("Requested issue exceeds available inventory.");
         var beforeQuantity = inventory.Quantity;
@@ -1145,6 +1180,7 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
                 Id = Guid.NewGuid(), WarehouseId = warehouseId, AreaName = areaName,
                 AreaType = "Storage",
                 Description = $"Khu vực kiểm soát cho hướng xử lý {direction}", CapacityKg = areaCapacity,
+                ProcessingDirection = direction,
                 CurrentKg = 0, CreateAt = DateTime.UtcNow, IsActive = true
             };
             var group = new AreaGroup

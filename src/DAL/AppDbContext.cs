@@ -20,9 +20,11 @@ namespace DAL
         public DbSet<ProcessingOperation> ProcessingOperations => Set<ProcessingOperation>();
         public DbSet<ProcessingOperationInput> ProcessingOperationInputs => Set<ProcessingOperationInput>();
         public DbSet<ProcessingOperationOutput> ProcessingOperationOutputs => Set<ProcessingOperationOutput>();
+        public DbSet<ProcessingShipmentEvent> ProcessingShipmentEvents => Set<ProcessingShipmentEvent>();
         public DbSet<ShipmentStatusHistory> ShipmentStatusHistories => Set<ShipmentStatusHistory>();
         public DbSet<DonationRequest> DonationRequests => Set<DonationRequest>();
         public DbSet<IntakeBatch> IntakeBatches => Set<IntakeBatch>();
+        public DbSet<ClassificationBatchTransfer> ClassificationBatchTransfers => Set<ClassificationBatchTransfer>();
         public DbSet<IntakeBatchDonationRequest> IntakeBatchDonationRequests => Set<IntakeBatchDonationRequest>();
         public DbSet<Inventory> Inventories => Set<Inventory>();
         public DbSet<InventoryTransaction> InventoryTransactions => Set<InventoryTransaction>();
@@ -267,6 +269,21 @@ namespace DAL
                 .HasOne(x => x.DistributionRequest).WithMany(x => x.ShipmentHistory)
                 .HasForeignKey(x => x.DistributionRequestId).OnDelete(DeleteBehavior.Cascade);
 
+            modelBuilder.Entity<ProcessingOperation>().Property(x => x.RowVersion).IsRowVersion();
+            modelBuilder.Entity<ProcessingOperation>().Property(x => x.GhnOrderCode).HasMaxLength(50);
+            modelBuilder.Entity<ProcessingOperation>().Property(x => x.GhnStatus).HasMaxLength(50);
+            modelBuilder.Entity<ProcessingOperation>().HasIndex(x => x.GhnOrderCode).IsUnique()
+                .HasFilter("[GhnOrderCode] IS NOT NULL");
+            modelBuilder.Entity<ProcessingShipmentEvent>().Property(x => x.Status).HasMaxLength(50);
+            modelBuilder.Entity<ProcessingShipmentEvent>().HasOne(x => x.ProcessingOperation)
+                .WithMany(x => x.ShipmentHistory).HasForeignKey(x => x.ProcessingOperationId)
+                .OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<Inventory>().Property(x => x.RowVersion).IsRowVersion();
+            modelBuilder.Entity<Warehouse>().Property(x => x.RowVersion).IsRowVersion();
+            modelBuilder.Entity<WarehouseArea>().Property(x => x.RowVersion).IsRowVersion();
+            modelBuilder.Entity<StorageLocation>().Property(x => x.RowVersion).IsRowVersion();
+            modelBuilder.Entity<InventoryTransaction>().HasIndex(x => x.ReferenceId)
+                .IsUnique().HasFilter("[ReferenceType] = 'ProcessingOperation' AND [ReferenceId] IS NOT NULL");
             modelBuilder.Entity<ProcessingOperation>().Property(x => x.OperationCode).HasMaxLength(32);
             modelBuilder.Entity<ProcessingOperation>().HasIndex(x => x.OperationCode).IsUnique();
             modelBuilder.Entity<ProcessingOperation>().Property(x => x.OperationType).HasMaxLength(30);
@@ -293,6 +310,22 @@ namespace DAL
             modelBuilder.Entity<ProcessingOperationInput>().HasOne(x => x.ClassifiedBatch).WithMany().HasForeignKey(x => x.ClassifiedBatchId).OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<ProcessingOperationOutput>().Property(x => x.OutputType).HasMaxLength(40);
+            modelBuilder.Entity<ProcessingOperation>().Property(x => x.ReturnCarrierName).HasMaxLength(100);
+            modelBuilder.Entity<ProcessingOperation>().Property(x => x.ReturnTrackingCode).HasMaxLength(100);
+            modelBuilder.Entity<IntakeBatch>().Property(x => x.RowVersion).IsRowVersion();
+            modelBuilder.Entity<ClassificationBatchTransfer>().HasOne<IntakeBatch>().WithMany()
+                .HasForeignKey(x => x.IntakeBatchId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<ClassificationBatchTransfer>().HasOne<OperationalTeam>().WithMany()
+                .HasForeignKey(x => x.FromTeamId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<ClassificationBatchTransfer>().HasOne<OperationalTeam>().WithMany()
+                .HasForeignKey(x => x.ToTeamId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<ClassificationBatchTransfer>().HasOne<User>().WithMany()
+                .HasForeignKey(x => x.StaffId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<ClassifiedBatch>().Property(x => x.RowVersion).IsRowVersion();
+            modelBuilder.Entity<IntakeBatch>().HasOne(x => x.ProcessingOperationOutput).WithMany()
+                .HasForeignKey(x => x.ProcessingOperationOutputId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<IntakeBatch>().HasIndex(x => x.ProcessingOperationOutputId)
+                .IsUnique().HasFilter("[ProcessingOperationOutputId] IS NOT NULL");
             modelBuilder.Entity<ProcessingOperationOutput>().HasOne(x => x.ProcessingOperation).WithMany(x => x.Outputs)
                 .HasForeignKey(x => x.ProcessingOperationId).OnDelete(DeleteBehavior.Restrict);
             modelBuilder.Entity<ProcessingOperationOutput>().HasOne(x => x.RecordedByStaff).WithMany()

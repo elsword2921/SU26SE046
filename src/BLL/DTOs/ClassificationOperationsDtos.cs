@@ -1,5 +1,9 @@
 namespace BLL.DTOs;
 
+public record CurrentClassificationTeamDto(Guid Id, string TeamName, string Status,
+    DateTime ShiftDate, TimeSpan StartTime, TimeSpan EndTime);
+public record ResumeClassificationBatchDto(Guid TeamId);
+
 public record ClassificationBatchSummaryDto(Guid Id, string BatchCode, string RouteName,
     DateTime IntakeDate, decimal TotalWeight, string Status, int DonationRequests, int ClassifiedItems,
     int? CountedItemCount, decimal? CountedTotalWeight, DateTime? CountedAt,
@@ -72,7 +76,13 @@ public record GroupedClassifiedBatchDetailDto(Guid Id, string BatchCode, DateTim
     string FabricType, string GarmentGroup, string ClothingType, string Gender, string TargetUser,
     string Size, string ConditionGrade, string ProcessingDirection, int TotalItem, string Status,
     decimal TotalWeight, string? ClassificationAreaName, DateTime? PlacedInClassificationAreaAt,
-    IReadOnlyList<string> DonationRequestCodes, IReadOnlyList<ClassificationItemDto> Items);
+    IReadOnlyList<string> DonationRequestCodes, IReadOnlyList<ClassificationItemDto> Items)
+{
+    public Guid? GarmentGroupId { get; init; }
+    public Guid? GenderId { get; init; }
+    public Guid? TargetUserId { get; init; }
+    public Guid? ConditionGradeId { get; init; }
+}
 
 public record SendGroupedBatchesToWarehouseDto(IReadOnlyList<Guid> GroupedBatchIds);
 public record SendGroupedBatchesToWarehouseResultDto(int Sent, int Skipped);

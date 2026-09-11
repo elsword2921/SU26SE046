@@ -4,6 +4,7 @@ using DAL;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DAL.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260910122303_AddProcessingGhnShipments")]
+    partial class AddProcessingGhnShipments
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -190,61 +193,6 @@ namespace DAL.Migrations
                     b.ToTable("Categories");
                 });
 
-            modelBuilder.Entity("DAL.Models.ClassificationBatchTransfer", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime?>("CreateAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid?>("CreatedBy")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime?>("DeleteAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid?>("DeletedBy")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("FromTeamId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("IntakeBatchId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<bool?>("IsActive")
-                        .HasColumnType("bit");
-
-                    b.Property<Guid>("StaffId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("ToTeamId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime>("TransferredAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("UpdateAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid?>("UpdatedBy")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("FromTeamId");
-
-                    b.HasIndex("IntakeBatchId");
-
-                    b.HasIndex("StaffId");
-
-                    b.HasIndex("ToTeamId");
-
-                    b.ToTable("ClassificationBatchTransfers");
-                });
-
             modelBuilder.Entity("DAL.Models.ClassifiedBatch", b =>
                 {
                     b.Property<Guid>("Id")
@@ -346,12 +294,6 @@ namespace DAL.Migrations
 
                     b.Property<Guid?>("RemovedFromClassificationAreaByStaffId")
                         .HasColumnType("uniqueidentifier");
-
-                    b.Property<byte[]>("RowVersion")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("rowversion");
 
                     b.Property<DateTime?>("SentToWarehouseAt")
                         .HasColumnType("datetime2");
@@ -1328,21 +1270,12 @@ namespace DAL.Migrations
                     b.Property<string>("Note")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<Guid?>("ProcessingOperationOutputId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.Property<Guid?>("ReceivingTeamId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("RouteName")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
-
-                    b.Property<byte[]>("RowVersion")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("rowversion");
 
                     b.Property<DateTime?>("SentToClassificationAt")
                         .HasColumnType("datetime2");
@@ -1397,10 +1330,6 @@ namespace DAL.Migrations
                     b.HasIndex("CurrentAreaId");
 
                     b.HasIndex("CurrentStorageLocationId");
-
-                    b.HasIndex("ProcessingOperationOutputId")
-                        .IsUnique()
-                        .HasFilter("[ProcessingOperationOutputId] IS NOT NULL");
 
                     b.HasIndex("ReceivingTeamId");
 
@@ -1899,9 +1828,6 @@ namespace DAL.Migrations
                     b.Property<Guid?>("DeletedBy")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<DateTime?>("ExpectedReturnDate")
-                        .HasColumnType("datetime2");
-
                     b.Property<string>("GhnOrderCode")
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
@@ -1970,20 +1896,6 @@ namespace DAL.Migrations
 
                     b.Property<DateTime>("RequestedAt")
                         .HasColumnType("datetime2");
-
-                    b.Property<string>("ReturnCarrierName")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<DateTime?>("ReturnDispatchedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("ReturnNotes")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("ReturnTrackingCode")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
 
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
@@ -3216,9 +3128,6 @@ namespace DAL.Migrations
                     b.Property<bool?>("IsActive")
                         .HasColumnType("bit");
 
-                    b.Property<string>("ProcessingDirection")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
                         .IsRequired()
@@ -3307,33 +3216,6 @@ namespace DAL.Migrations
                         .IsRequired();
 
                     b.Navigation("Area");
-                });
-
-            modelBuilder.Entity("DAL.Models.ClassificationBatchTransfer", b =>
-                {
-                    b.HasOne("DAL.Models.OperationalTeam", null)
-                        .WithMany()
-                        .HasForeignKey("FromTeamId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("DAL.Models.IntakeBatch", null)
-                        .WithMany()
-                        .HasForeignKey("IntakeBatchId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("DAL.Models.User", null)
-                        .WithMany()
-                        .HasForeignKey("StaffId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("DAL.Models.OperationalTeam", null)
-                        .WithMany()
-                        .HasForeignKey("ToTeamId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("DAL.Models.ClassifiedBatch", b =>
@@ -3680,11 +3562,6 @@ namespace DAL.Migrations
                         .HasForeignKey("CurrentStorageLocationId")
                         .OnDelete(DeleteBehavior.Restrict);
 
-                    b.HasOne("DAL.Models.ProcessingOperationOutput", "ProcessingOperationOutput")
-                        .WithMany()
-                        .HasForeignKey("ProcessingOperationOutputId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("DAL.Models.OperationalTeam", "ReceivingTeam")
                         .WithMany("IntakeBatches")
                         .HasForeignKey("ReceivingTeamId")
@@ -3726,8 +3603,6 @@ namespace DAL.Migrations
                     b.Navigation("CurrentAreaGroup");
 
                     b.Navigation("CurrentStorageLocation");
-
-                    b.Navigation("ProcessingOperationOutput");
 
                     b.Navigation("ReceivingTeam");
 

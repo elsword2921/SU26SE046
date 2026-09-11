@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BLL.Services.Implements.ClassificationOperations;
 
-public class ClassificationOperationsService(AppDbContext context) : IClassificationOperationsService
+public partial class ClassificationOperationsService(AppDbContext context) : IClassificationOperationsService
 {
     private const string FabricType = "FabricType";
     private const string GarmentGroup = "GarmentGroup";
@@ -26,13 +26,8 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
                 && (x.Status == "AssignedToClassification"
                 || x.Status == "AwaitingClassificationCount" || x.Status == "ReadyForClassification"
                 || x.Status == "Classifying"
-                || (x.Status == "InClassifiedArea" && x.ClassifiedItems.Any(item =>
-                    item.IsActive != false && (!item.ClassifiedBatchId.HasValue
-                    || (item.ClassifiedBatch != null && item.ClassifiedBatch.IsActive != false
-                    && (item.ClassifiedBatch.Status == "Draft"
-                        || item.ClassifiedBatch.Status == "ReadyForPlacement"
-                        || item.ClassifiedBatch.Status == "PlacedInClassifiedArea"
-                        || item.ClassifiedBatch.Status == "Open")))))))
+                || ((x.Status == "InClassifiedArea" || x.Status == "Classified")
+                    && x.ClassifiedItems.Any(item => item.IsActive != false && !item.ClassifiedBatchId.HasValue))))
             .OrderByDescending(x => x.IntakeDate)
             .Select(x => new ClassificationBatchSummaryDto(x.Id, x.BatchCode, x.RouteName, x.IntakeDate,
                 x.TotalWeight, x.Status,
@@ -313,7 +308,10 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
             .Where(x => x.WarehouseId == warehouse.Id
                 && (x.Status == "ReadyForPlacement" || x.Status == "PlacedInClassifiedArea" || x.Status == "Open")
                 && x.IsActive != false);
-        if (date.HasValue) query = query.Where(x => x.ClassificationDate == date.Value.Date);
+        // Physical occupancy must include older batches still placed in the area.
+        // A date filter may narrow unplaced work, never hide stock occupying a location.
+        if (date.HasValue) query = query.Where(x => x.ClassificationDate == date.Value.Date
+            || x.PlacedInClassificationAreaAt.HasValue);
         var batches = await query.Include(x => x.DonationRequestSources.Where(s => s.IsActive != false))
             .ThenInclude(x => x.DonationRequest).OrderBy(x => x.BatchCode).ToListAsync();
         GroupedClassifiedBatchDto Map(ClassifiedBatch x) => new(x.Id, x.BatchCode, x.ClassificationDate,
@@ -351,7 +349,11 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
             group.ClassificationAreaName, group.PlacedInClassificationAreaAt,
             group.DonationRequestSources.Select(x => x.DonationRequest.RequestCode)
                 .Distinct().OrderBy(code => code).ToList(),
-            group.Items.OrderBy(x => x.ClassifiedAt).Select(MapItem).ToList());
+            group.Items.OrderBy(x => x.ClassifiedAt).Select(MapItem).ToList())
+        {
+            GarmentGroupId = group.GarmentGroupId, GenderId = group.GenderId,
+            TargetUserId = group.TargetUserId, ConditionGradeId = group.ConditionGradeId
+        };
     }
 
     public async Task<IReadOnlyList<UnassignedClassifiedItemDto>> GetUnassignedItemsAsync(Guid staffId)
@@ -405,6 +407,71 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
         context.ClassifiedBatches.Add(batch);
         await context.SaveChangesAsync();
         return (await GetGroupedBatchAsync(staffId, batch.Id))!;
+    }
+
+    public async Task UpdateManualBatchAsync(Guid staffId, Guid batchId, CreateManualClassifiedBatchDto dto)
+    {
+        await using var tx = await context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
+        var batch = await RequireEditableManualBatchAsync(staffId, batchId);
+        var ids = new[] { dto.GarmentGroupId, dto.GenderId, dto.TargetUserId, dto.ConditionGradeId };
+        var categories = await context.Categories.Where(x => ids.Contains(x.Id) && x.IsActive != false).ToListAsync();
+        Category Require(Guid id, string type) => categories.SingleOrDefault(x => x.Id == id && x.Type == type)
+            ?? throw new InvalidOperationException("Thuộc tính batch không hợp lệ hoặc đã ngừng sử dụng.");
+        var group = Require(dto.GarmentGroupId, GarmentGroup);
+        var gender = Require(dto.GenderId, Gender);
+        var target = Require(dto.TargetUserId, TargetUser);
+        var grade = Require(dto.ConditionGradeId, ConditionGrade);
+        var rating = grade.Code.ToUpperInvariant() switch
+        {
+            "GRADE_A" => 1, "GRADE_B" => 2, "GRADE_C" => 3,
+            _ => throw new InvalidOperationException("Nhãn batch phải là A, B hoặc C.")
+        };
+        if (batch.Items.Any(x => x.IsActive != false && (x.GarmentGroupId != group.Id
+            || x.GenderId != gender.Id || x.TargetUserId != target.Id || x.ConditionGradeId != grade.Id)))
+            throw new InvalidOperationException("Batch đang chứa món không khớp thuộc tính mới. Bỏ các món khỏi batch trước khi đổi thuộc tính.");
+        batch.GarmentGroupId = group.Id; batch.GarmentGroup = group.Name; batch.ClothingType = group.Name;
+        batch.GenderId = gender.Id; batch.Gender = gender.Name;
+        batch.TargetUserId = target.Id; batch.TargetUser = target.Name;
+        batch.ConditionGradeId = grade.Id; batch.ConditionRating = rating;
+        batch.ProcessingDirection = rating == 1 ? "Charity" : rating == 2 ? "Recycling" : "Disposal";
+        // The batch code is a stable identifier; current grade is stored separately.
+        batch.UpdateAt = DateTime.UtcNow; batch.UpdatedBy = staffId;
+        await context.SaveChangesAsync();
+        await tx.CommitAsync();
+    }
+
+    public async Task DeleteManualBatchAsync(Guid staffId, Guid batchId)
+    {
+        await using var tx = await context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
+        var batch = await RequireEditableManualBatchAsync(staffId, batchId);
+        var now = DateTime.UtcNow;
+        foreach (var item in batch.Items.Where(x => x.IsActive != false))
+        {
+            item.ClassifiedBatchId = null; item.Status = "Classified";
+            item.UpdateAt = now; item.UpdatedBy = staffId;
+        }
+        var sources = await context.ClassifiedBatchDonationRequests.Where(x => x.ClassifiedBatchId == batchId && x.IsActive != false).ToListAsync();
+        foreach (var source in sources)
+        {
+            source.IsActive = false; source.DeleteAt = now; source.DeletedBy = staffId;
+        }
+        batch.IsActive = false; batch.DeleteAt = now; batch.DeletedBy = staffId;
+        batch.UpdateAt = now; batch.UpdatedBy = staffId;
+        await context.SaveChangesAsync();
+        await tx.CommitAsync();
+    }
+
+    private async Task<ClassifiedBatch> RequireEditableManualBatchAsync(Guid staffId, Guid batchId)
+    {
+        var warehouseId = await RequireStaffWarehouseIdAsync(staffId);
+        var batch = await context.ClassifiedBatches.Include(x => x.Items)
+            .FirstOrDefaultAsync(x => x.Id == batchId && x.WarehouseId == warehouseId && x.IsActive != false)
+            ?? throw new InvalidOperationException("Không tìm thấy batch trong kho của bạn.");
+        if (!batch.GroupKey.StartsWith("MANUAL|") || batch.Status is not ("Draft" or "ReadyForPlacement")
+            || batch.PlacedInClassificationAreaAt.HasValue || batch.SentToWarehouseAt.HasValue
+            || batch.StorageLocationId.HasValue || await context.Inventories.AnyAsync(x => x.ClassifiedBatchId == batch.Id))
+            throw new InvalidOperationException("Chỉ sửa/xóa batch thủ công đang tạo hoặc chờ xếp khu, chưa bàn giao.");
+        return batch;
     }
 
     public async Task AssignItemsAsync(Guid staffId, Guid groupedBatchId, IReadOnlyList<Guid> itemIds)
@@ -901,7 +968,10 @@ public class ClassificationOperationsService(AppDbContext context) : IClassifica
         if (!batch.ClassificationTeamId.HasValue)
             throw new InvalidOperationException("The batch has not been assigned to a classification team.");
         var team = await RequireMyClassificationTeamAsync(staffId, batch.ClassificationTeamId.Value);
-        if (team.Status != "InProgress")
+        var now = VietnamTime.Now;
+        if (team.Status != "InProgress" || team.Shift.IsActive == false || team.Shift.Status == "Completed"
+            || now < team.Shift.ShiftDate.Date.Add(team.Shift.StartTime)
+            || now >= team.Shift.ShiftDate.Date.Add(team.Shift.EndTime))
             throw new InvalidOperationException("Start the classification team shift before processing this batch.");
     }
 

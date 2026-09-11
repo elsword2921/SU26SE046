@@ -91,6 +91,14 @@ public class ClassificationOperationsController(IClassificationOperationsService
     public async Task<IActionResult> CreateManualBatch(CreateManualClassifiedBatchDto dto) =>
         Ok(await service.CreateManualBatchAsync(CurrentUserId, dto));
 
+    [HttpPut("grouped-batches/{groupedBatchId:guid}")]
+    public async Task<IActionResult> UpdateManualBatch(Guid groupedBatchId, CreateManualClassifiedBatchDto dto)
+    { await service.UpdateManualBatchAsync(CurrentUserId, groupedBatchId, dto); return NoContent(); }
+
+    [HttpDelete("grouped-batches/{groupedBatchId:guid}")]
+    public async Task<IActionResult> DeleteManualBatch(Guid groupedBatchId)
+    { await service.DeleteManualBatchAsync(CurrentUserId, groupedBatchId); return NoContent(); }
+
     [HttpPost("grouped-batches/{groupedBatchId:guid}/items")]
     public async Task<IActionResult> AssignItems(Guid groupedBatchId, AssignItemsToClassifiedBatchDto dto)
     { await service.AssignItemsAsync(CurrentUserId, groupedBatchId, dto.ItemIds); return NoContent(); }
@@ -122,4 +130,11 @@ public class ClassificationOperationsController(IClassificationOperationsService
         Ok(await service.SendGroupedBatchesToWarehouseAsync(CurrentUserId, dto.GroupedBatchIds));
 
     private Guid CurrentUserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+    [HttpGet("my-current-teams")]
+    public async Task<IActionResult> CurrentTeams() => Ok(await service.GetCurrentTeamsAsync(CurrentUserId));
+
+    [HttpPost("batches/{batchId:guid}/resume")]
+    public async Task<IActionResult> Resume(Guid batchId, ResumeClassificationBatchDto dto)
+    { await service.ResumeBatchAsync(CurrentUserId, batchId, dto.TeamId); return NoContent(); }
 }

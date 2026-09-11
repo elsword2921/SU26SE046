@@ -4,14 +4,16 @@ namespace DAL.Models;
 
 public class ProcessingOperation : BaseEntity
 {
+    public byte[] RowVersion { get; set; } = [];
     public string OperationCode { get; set; } = string.Empty;
 
     /// Recycling or Disposal
     public string OperationType { get; set; } = string.Empty;
 
     /// PendingOrganizationApproval, RejectedByOrganization,
-    /// PendingManagerApproval, Rejected, Approved,
-    /// Issued, InTransit, OrganizationReceived, Processing, AwaitingReturn, Completed, Cancelled
+    /// PendingManagerApproval, RejectedByManager, Approved,
+    /// ReadyForGhn, GhnBooked, InTransit, Delivered, DeliveryException, ShipmentCancelled, Returned,
+    /// Issued (legacy), OrganizationReceived, Processing, AwaitingReturn, Completed, Cancelled
     public string Status { get; set; } = string.Empty;
     public Guid WarehouseId { get; set; }
     public Guid OrganizationId { get; set; }
@@ -28,8 +30,17 @@ public class ProcessingOperation : BaseEntity
     public DateTime? ProcessingStartedAt { get; set; }
     public DateTime? ProcessingCompletedAt { get; set; }
     public DateTime? OutputReturnedAt { get; set; }
+    public DateTime? ExpectedReturnDate { get; set; }
+    public DateTime? ReturnDispatchedAt { get; set; }
+    public string? ReturnCarrierName { get; set; }
+    public string? ReturnTrackingCode { get; set; }
+    public string? ReturnNotes { get; set; }
     public string? TrackingCode { get; set; }
     public string? CarrierName { get; set; }
+    public string? GhnOrderCode { get; set; }
+    public string? GhnStatus { get; set; }
+    public DateTime? GhnUpdatedAt { get; set; }
+    public virtual ICollection<ProcessingShipmentEvent> ShipmentHistory { get; set; } = new List<ProcessingShipmentEvent>();
     public string? RequestNotes { get; set; }
     public string? OrganizationRejectionReason { get; set; }
     public string? ManagerRejectionReason { get; set; }

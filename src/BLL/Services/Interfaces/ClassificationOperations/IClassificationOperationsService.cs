@@ -4,6 +4,8 @@ namespace BLL.Services.Interfaces.ClassificationOperations;
 
 public interface IClassificationOperationsService
 {
+    Task<IReadOnlyList<CurrentClassificationTeamDto>> GetCurrentTeamsAsync(Guid staffId);
+    Task ResumeBatchAsync(Guid staffId, Guid batchId, Guid teamId);
     Task<IReadOnlyList<ClassificationBatchSummaryDto>> GetBatchesAsync(Guid staffId);
     Task<ClassificationBatchDetailDto?> GetBatchAsync(Guid staffId, Guid batchId);
     Task<ClassificationCatalogDto> GetCatalogAsync();
@@ -19,6 +21,8 @@ public interface IClassificationOperationsService
     Task<GroupedClassifiedBatchDetailDto?> GetGroupedBatchAsync(Guid staffId, Guid groupedBatchId);
     Task<IReadOnlyList<UnassignedClassifiedItemDto>> GetUnassignedItemsAsync(Guid staffId);
     Task<GroupedClassifiedBatchDetailDto> CreateManualBatchAsync(Guid staffId, CreateManualClassifiedBatchDto dto);
+    Task UpdateManualBatchAsync(Guid staffId, Guid batchId, CreateManualClassifiedBatchDto dto);
+    Task DeleteManualBatchAsync(Guid staffId, Guid batchId);
     Task AssignItemsAsync(Guid staffId, Guid groupedBatchId, IReadOnlyList<Guid> itemIds);
     Task RemoveItemAsync(Guid staffId, Guid groupedBatchId, Guid itemId);
     Task FinalizeManualBatchAsync(Guid staffId, Guid groupedBatchId);

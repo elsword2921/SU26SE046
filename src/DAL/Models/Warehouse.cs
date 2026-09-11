@@ -4,6 +4,7 @@ namespace DAL.Models
 {
     public class Warehouse : BaseEntity
     {
+        public byte[] RowVersion { get; set; } = [];
         public string WarehouseName { get; set; } = string.Empty;
         public string Address { get; set; } = string.Empty;
         public string? PhoneNumber { get; set; }

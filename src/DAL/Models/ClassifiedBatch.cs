@@ -4,6 +4,7 @@ namespace DAL.Models;
 
 public class ClassifiedBatch : BaseEntity
 {
+    public byte[] RowVersion { get; set; } = [];
     public Guid WarehouseId { get; set; }
     public Guid? GroupId { get; set; }
     public Guid? AreaId { get; set; }

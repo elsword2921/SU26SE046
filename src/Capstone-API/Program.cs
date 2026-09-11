@@ -58,7 +58,14 @@ builder.Services.AddScoped<IDonorRequestService>(provider =>
 builder.Services.AddScoped<IWarehouseService, WarehouseService>();
 builder.Services.AddScoped<IReceivingOperationsService, ReceivingOperationsService>();
 builder.Services.AddScoped<IClassificationOperationsService, ClassificationOperationsService>();
-builder.Services.AddScoped<IProcessingOperationsService, ProcessingOperationsService>();
+builder.Services.AddHttpClient<IProcessingOperationsService, ProcessingOperationsService>(client =>
+{
+    var endpoint = (builder.Configuration["Ghn:Endpoint"] ?? builder.Configuration["GHN:Endpoint"]
+        ?? "https://dev-online-gateway.ghn.vn/shiip/public-api/").TrimEnd('/');
+    if (endpoint.EndsWith("/v2", StringComparison.OrdinalIgnoreCase)) endpoint = endpoint[..^3];
+    client.BaseAddress = new Uri($"{endpoint}/");
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
 builder.Services.AddHttpClient<GeminiClassificationService>(client =>
 {
     client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");
@@ -196,6 +203,11 @@ app.Use(async (context, next) =>
         context.Response.StatusCode = StatusCodes.Status403Forbidden;
         context.Response.ContentType = "application/json";
         await context.Response.WriteAsJsonAsync(new { message = exception.Message });
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        context.Response.StatusCode = StatusCodes.Status409Conflict;
+        await context.Response.WriteAsJsonAsync(new { message = "Tồn kho hoặc yêu cầu vừa thay đổi. Vui lòng tải lại trước khi tiếp tục." });
     }
     catch (InvalidOperationException exception)
     {

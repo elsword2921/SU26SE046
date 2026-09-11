@@ -4,6 +4,9 @@ namespace DAL.Models
 {
     public class IntakeBatch : BaseEntity
     {
+        public byte[] RowVersion { get; set; } = [];
+        public Guid? ProcessingOperationOutputId { get; set; }
+        public virtual ProcessingOperationOutput? ProcessingOperationOutput { get; set; }
         public Guid WarehouseId { get; set; }
         public Guid ShiftId { get; set; }
         public Guid? ReceivingTeamId { get; set; }

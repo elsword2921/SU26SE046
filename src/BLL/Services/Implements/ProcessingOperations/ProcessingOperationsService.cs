@@ -1,22 +1,27 @@
+using System.Data;
+using System.Security.Authentication;
 using BLL.DTOs;
 using BLL.Services.Implements.Notifications;
 using BLL.Services.Interfaces.ProcessingOperations;
 using DAL;
 using DAL.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace BLL.Services.Implements.ProcessingOperations;
 
-public class ProcessingOperationsService(AppDbContext context)
+public partial class ProcessingOperationsService(AppDbContext context, HttpClient ghnClient, IConfiguration configuration)
     : IProcessingOperationsService
 {
     public async Task<ProcessingOperationCreatedDto> CreateAsync(Guid userId,CreateProcessingOperationDto dto)
     {
-        await using var transaction = await context.Database.BeginTransactionAsync();
+        await using var transaction = await context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+        await RequireUserAsync(userId, "Manager");
         ValidateOperationType(dto.OperationType);
         if (dto.Inputs is null || dto.Inputs.Count == 0)
             throw new InvalidOperationException(
                 "Select at least one inventory item.");
+        if (dto.Inputs.Any(x => x is null)) throw new InvalidOperationException("Danh sách batch không hợp lệ.");
         var inputIds = dto.Inputs
             .Select(x => x.InventoryId)
             .Distinct()
@@ -63,45 +68,22 @@ public class ProcessingOperationsService(AppDbContext context)
         }
         foreach (var input in dto.Inputs)
         {
-            if (input.RequestedQuantity <= 0)
-                throw new InvalidOperationException(
-                    "Requested quantity must be greater than zero.");
-            if (input.RequestedWeight <= 0)
-                throw new InvalidOperationException(
-                    "Requested weight must be greater than zero.");
-            var inventory = inventories.Single(x =>
-                x.Id == input.InventoryId);
-            if (inventory.Status != "Available")
-            {
-                throw new InvalidOperationException(
-                    $"Inventory {inventory.Sku} is not available.");
-            }
-            if (inventory.ProcessingDirection != dto.OperationType)
-            {
-                throw new InvalidOperationException(
-                    $"Inventory {inventory.Sku} is not classified for {dto.OperationType}.");
-            }
-            var availableQuantity = inventory.Quantity - inventory.ReservedQuantity;
-            var availableWeight = inventory.TotalWeight - inventory.ReservedWeight;
-            if (input.RequestedQuantity > availableQuantity)
-            {
-                throw new InvalidOperationException(
-                    $"Insufficient inventory quantity for {inventory.Sku}.");
-            }
-            if (input.RequestedWeight > availableWeight)
-            {
-                throw new InvalidOperationException(
-                    $"Insufficient inventory weight for {inventory.Sku}.");
-            }
+            var inventory = inventories.Single(x => x.Id == input.InventoryId);
+            ValidateInventory(inventory, dto.WarehouseId, dto.OperationType);
+            if (inventory.ReservedQuantity != 0 || inventory.ReservedWeight != 0)
+                throw new InvalidOperationException("Batch đang được giữ cho yêu cầu khác.");
+            if ((input.RequestedQuantity.HasValue && input.RequestedQuantity != inventory.Quantity)
+                || (input.RequestedWeight.HasValue && input.RequestedWeight != inventory.TotalWeight))
+                throw new InvalidOperationException("Yêu cầu xử lý phải chọn nguyên batch theo tồn kho hiện tại. Vui lòng tải lại danh sách.");
         }
         var lockedInventoryIds = await context.ProcessingOperationInputs
             .Where(input =>
                 input.IsActive != false &&
                 inputIds.Contains(input.InventoryId) &&
                 input.ProcessingOperation.IsActive != false &&
-                input.ProcessingOperation.Status != "Rejected" &&
-                input.ProcessingOperation.Status != "Cancelled" &&
-                input.ProcessingOperation.Status != "Completed")
+                (input.ProcessingOperation.Status == "PendingOrganizationApproval" ||
+                 input.ProcessingOperation.Status == "PendingManagerApproval" ||
+                 input.ProcessingOperation.Status == "Approved"))
             .Select(input => input.InventoryId)
             .Distinct()
             .ToListAsync();
@@ -125,7 +107,7 @@ public class ProcessingOperationsService(AppDbContext context)
             operation.Inputs.Add(new ProcessingOperationInput
             {
                 Id = Guid.NewGuid(), ProcessingOperationId = operationId, InventoryId = inventory.Id, ClassifiedBatchId = inventory.ClassifiedBatchId,
-                RequestedQuantity = input.RequestedQuantity, RequestedWeight = Math.Round(input.RequestedWeight, 2), IssuedQuantity = 0,
+                RequestedQuantity = inventory.Quantity, RequestedWeight = inventory.TotalWeight, IssuedQuantity = 0,
                 IssuedWeight = 0, CreateAt = now, CreatedBy = userId, IsActive = true
             });
         }
@@ -144,6 +126,8 @@ public class ProcessingOperationsService(AppDbContext context)
 
     public async Task ApproveByOrganizationAsync(Guid organizationId,Guid operationId)
     {
+        await using var transaction = await context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+        await RequireUserAsync(organizationId, "RecyclingOrganization", "DisposalOrganization");
         var operation = await context.ProcessingOperations
             .Include(x => x.Organization)
             .FirstOrDefaultAsync(x => x.Id == operationId && x.IsActive != false);
@@ -164,10 +148,13 @@ public class ProcessingOperationsService(AppDbContext context)
         await NotifyManagersAsync(context,operation,"ProcessingOperationOrganizationApproved","Yêu cầu xử lý chờ Manager duyệt",
             $"Tổ chức {operation.Organization.FullName} đã chấp thuận yêu cầu {operation.OperationCode}. Yêu cầu đang chờ Manager phê duyệt.",organizationId);
         await context.SaveChangesAsync();
+        await transaction.CommitAsync();
     }
 
     public async Task RejectByOrganizationAsync(Guid organizationId,Guid operationId,ProcessingOperationDecisionDto dto)
     {
+        await using var transaction = await context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+        await RequireUserAsync(organizationId, "RecyclingOrganization", "DisposalOrganization");
         var operation = await context.ProcessingOperations
             .Include(x => x.Organization)
             .FirstOrDefaultAsync(x => x.Id == operationId && x.IsActive != false);
@@ -191,12 +178,13 @@ public class ProcessingOperationsService(AppDbContext context)
         await NotifyManagersAsync(context,operation,"ProcessingOperationOrganizationRejected","Yêu cầu xử lý bị từ chối",
             $"Yêu cầu {operation.OperationCode} đã bị tổ chức từ chối. Lý do: {operation.OrganizationRejectionReason}",organizationId);
         await context.SaveChangesAsync();
+        await transaction.CommitAsync();
     }
 
     public async Task ApproveByManagerAsync(Guid managerId,Guid operationId)
     {
         await using var transaction =
-            await context.Database.BeginTransactionAsync();
+            await context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
         var operation = await context.ProcessingOperations
             .Include(x => x.Inputs)
                 .ThenInclude(x => x.Inventory)
@@ -213,12 +201,17 @@ public class ProcessingOperationsService(AppDbContext context)
         if (manager is null)
             throw new KeyNotFoundException("Manager not found.");
         if (manager.Role.RoleName != "Manager")
-            throw new UnauthorizedAccessException(
+            throw new AuthenticationException(
                 "Only a manager can approve a processing operation.");
+        if (!operation.Inputs.Any(x => x.IsActive != false))
+            throw new InvalidOperationException("Yêu cầu không có batch để duyệt.");
         foreach (var input in operation.Inputs
             .Where(x => x.IsActive != false))
         {
             var inventory = input.Inventory;
+            ValidateInventory(inventory, operation.WarehouseId, operation.OperationType);
+            if (input.RequestedQuantity != inventory.Quantity || input.RequestedWeight != inventory.TotalWeight)
+                throw new InvalidOperationException("Tồn kho đã thay đổi. Hãy hủy và tạo lại yêu cầu cho nguyên batch.");
             var availableQuantity = inventory.Quantity - inventory.ReservedQuantity;
             var availableWeight = inventory.TotalWeight - inventory.ReservedWeight;
             if (input.RequestedQuantity > availableQuantity)
@@ -252,6 +245,8 @@ public class ProcessingOperationsService(AppDbContext context)
 
     public async Task RejectByManagerAsync(Guid managerId,Guid operationId,ProcessingOperationDecisionDto dto)
     {
+        await using var transaction = await context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+        await RequireUserAsync(managerId, "Manager");
         var operation = await context.ProcessingOperations
             .FirstOrDefaultAsync(x => x.Id == operationId && x.IsActive != false);
         if (operation is null)
@@ -264,6 +259,8 @@ public class ProcessingOperationsService(AppDbContext context)
             throw new InvalidOperationException(
                 "Rejection reason is required.");
         operation.Status = "RejectedByManager";
+        operation.RejectedByManagerId = managerId;
+        operation.RejectedAt = DateTime.UtcNow;
         operation.ManagerRespondedAt = DateTime.UtcNow;
         operation.ManagerRejectionReason = dto.RejectionReason.Trim();
         operation.UpdateAt = DateTime.UtcNow;
@@ -272,6 +269,7 @@ public class ProcessingOperationsService(AppDbContext context)
             $"Yêu cầu {operation.OperationCode} đã bị Manager từ chối. Lý do: {operation.ManagerRejectionReason}",
             $"/organization/processing-operations/{operation.Id}",managerId);
         await context.SaveChangesAsync();
+        await transaction.CommitAsync();
     }
 
     public async Task<List<ProcessingOperationListDto>> GetListAsync(Guid userId,string? status)
@@ -283,7 +281,7 @@ public class ProcessingOperationsService(AppDbContext context)
         if (user is null)
             throw new KeyNotFoundException("User not found.");
         var roleName = user.Role.RoleName;
-        if (roleName != "Manager" && roleName != "RecyclingOrganization" && roleName != "DisposalOrganization")
+        if (roleName != "Manager" && roleName != "RecyclingOrganization" && roleName != "DisposalOrganization" && roleName != "WarehouseStaff")
         {
             throw new InvalidOperationException(
                 "You are not allowed to view processing operations.");
@@ -295,6 +293,8 @@ public class ProcessingOperationsService(AppDbContext context)
         {
             query = query.Where(x => x.OrganizationId == userId);
         }
+        if (roleName == "WarehouseStaff")
+            query = query.Where(x => x.WarehouseId == user.WarehouseId && (x.Status == "Approved" || x.IssuedAt != null));
         if (!string.IsNullOrWhiteSpace(status))
         {
             status = status.Trim();
@@ -318,7 +318,7 @@ public class ProcessingOperationsService(AppDbContext context)
         if (user is null)
             throw new KeyNotFoundException("User not found.");
         var roleName = user.Role.RoleName;
-        if (roleName != "Manager"&& roleName != "RecyclingOrganization" && roleName != "DisposalOrganization")
+        if (roleName != "Manager" && roleName != "RecyclingOrganization" && roleName != "DisposalOrganization" && roleName != "WarehouseStaff")
         {
             throw new InvalidOperationException(
                 "You are not allowed to view processing operations.");
@@ -332,6 +332,7 @@ public class ProcessingOperationsService(AppDbContext context)
             .Include(x => x.Inputs)
                 .ThenInclude(x => x.ClassifiedBatch)
             .Include(x => x.Outputs)
+            .Include(x => x.ShipmentHistory)
             .FirstOrDefaultAsync(x => x.Id == operationId && x.IsActive != false);
         if (operation is null)
             throw new KeyNotFoundException(
@@ -341,6 +342,8 @@ public class ProcessingOperationsService(AppDbContext context)
             throw new InvalidOperationException(
                 "You are not the organization assigned to this operation.");
         }
+        if (roleName == "WarehouseStaff" && user.WarehouseId != operation.WarehouseId)
+            throw new AuthenticationException("Yêu cầu thuộc kho khác.");
         return new ProcessingOperationDetailDto(operation.Id,operation.OperationCode,operation.OperationType,operation.Status,operation.WarehouseId,
             operation.Warehouse.WarehouseName,operation.OrganizationId,operation.Organization.FullName,operation.CreatedByUserId,operation.ApprovedByOrganizationId,
             operation.ApprovedByManagerId,operation.IssuedByStaffId,operation.RequestedAt,operation.OrganizationRespondedAt,operation.ManagerRespondedAt,
@@ -352,14 +355,22 @@ public class ProcessingOperationsService(AppDbContext context)
                     x.IssuedQuantity,x.IssuedWeight,x.Notes)).ToList(),
             operation.Outputs.Where(x => x.IsActive != false).Select(x => new ProcessingOperationOutputDetailDto(x.Id,x.OutputType,x.Quantity,x.Weight,
                     x.ReturnedQuantity,x.ReturnedWeight,x.RecordedByStaffId,x.RecordedAt,x.Notes)).ToList()
-        );
+        )
+        {
+            RecyclingReturn = operation.OperationType == "Recycling" ? await GetReturnDetailAsync(operation) : null,
+            Shipping = new ProcessingShippingDto(operation.Warehouse.Address, operation.Warehouse.PhoneNumber,
+                operation.Organization.PhoneNumber, operation.Organization.Address, operation.GhnOrderCode,
+                operation.GhnStatus, operation.GhnUpdatedAt, operation.ShipmentHistory
+                    .OrderByDescending(x => x.OccurredAt)
+                    .Select(x => new ShipmentEventDto(x.Status, x.Description, "GHN", x.OccurredAt)).ToList())
+        };
     }
 
     public async Task IssueAsync(Guid staffId,Guid operationId,IssueProcessingOperationDto dto)
     {
         await using var transaction =
-            await context.Database.BeginTransactionAsync();
-        var operation = await context.ProcessingOperations.Include(x => x.Warehouse).Include(x => x.Inputs).ThenInclude(x => x.Inventory).ThenInclude(x => x.StorageLocation)
+            await context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+        var operation = await context.ProcessingOperations.Include(x => x.Warehouse).Include(x => x.Inputs).ThenInclude(x => x.Inventory).ThenInclude(x => x.StorageLocation)!.ThenInclude(x => x!.Area)
             .FirstOrDefaultAsync(x => x.Id == operationId && x.IsActive != false);
         if (operation is null)
             throw new KeyNotFoundException(
@@ -373,10 +384,10 @@ public class ProcessingOperationsService(AppDbContext context)
         if (staff is null)
             throw new KeyNotFoundException("Staff not found.");
         if (staff.Role.RoleName != "WarehouseStaff")
-            throw new UnauthorizedAccessException(
+            throw new AuthenticationException(
                 "Only warehouse staff can issue processing operations.");
         if (staff.WarehouseId != operation.WarehouseId)
-            throw new UnauthorizedAccessException(
+            throw new AuthenticationException(
                 "This processing operation belongs to another warehouse.");
         var inputs = operation.Inputs.Where(x => x.IsActive != false).ToList();
         if (inputs.Count == 0)
@@ -405,7 +416,10 @@ public class ProcessingOperationsService(AppDbContext context)
             var inventory = input.Inventory;
             var issueQuantity = input.RequestedQuantity;
             var issueWeight = input.RequestedWeight;
-            if (issueQuantity <= 0)
+            ValidateInventory(inventory, operation.WarehouseId, operation.OperationType);
+            if (issueQuantity != inventory.Quantity || issueWeight != inventory.TotalWeight)
+                throw new InvalidOperationException("Tồn kho không khớp nguyên batch đã duyệt. Vui lòng kiểm tra lại yêu cầu.");
+            if (issueQuantity < 0)
             {
                 throw new InvalidOperationException(
                     $"Invalid requested quantity for {inventory.Sku}.");
@@ -468,15 +482,13 @@ public class ProcessingOperationsService(AppDbContext context)
             });
         }
         context.InventoryTransactions.Add(inventoryTransaction);
-        operation.Status = "Issued";
+        operation.Status = "ReadyForGhn";
         operation.IssuedByStaffId = staffId;
         operation.IssuedAt = now;
-        operation.TrackingCode = string.IsNullOrWhiteSpace(operation.TrackingCode) ? null : operation.TrackingCode.Trim();
-        operation.CarrierName = string.IsNullOrWhiteSpace(operation.CarrierName) ? null : operation.CarrierName.Trim();
         operation.UpdateAt = now;
         operation.UpdatedBy = staffId;
         NotificationWriter.NotifyUser(context,operation.OrganizationId,"ProcessingOperationIssued","Kho đã xuất hàng xử lý",
-            $"Yêu cầu {operation.OperationCode} đã được kho xuất hàng. Hàng đang được bàn giao cho tổ chức xử lý.",
+            $"Yêu cầu {operation.OperationCode} đã lập phiếu xuất, đang chờ kho tạo vận đơn GHN đến lấy hàng.",
             $"/organization/processing-operations/{operation.Id}",staffId);
         await context.SaveChangesAsync();
         await transaction.CommitAsync();

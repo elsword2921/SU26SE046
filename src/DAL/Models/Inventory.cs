@@ -5,6 +5,7 @@ namespace DAL.Models
 {
     public class Inventory : BaseEntity
     {
+        public byte[] RowVersion { get; set; } = [];
         public Guid WarehouseId { get; set; }
         public Guid? AreaGroupId { get; set; }
         public Guid? StorageLocationId { get; set; }

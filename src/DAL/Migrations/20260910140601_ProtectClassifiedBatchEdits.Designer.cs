@@ -4,6 +4,7 @@ using DAL;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DAL.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260910140601_ProtectClassifiedBatchEdits")]
+    partial class ProtectClassifiedBatchEdits
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -188,61 +191,6 @@ namespace DAL.Migrations
                         .HasFilter("[ParentId] IS NOT NULL");
 
                     b.ToTable("Categories");
-                });
-
-            modelBuilder.Entity("DAL.Models.ClassificationBatchTransfer", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime?>("CreateAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid?>("CreatedBy")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime?>("DeleteAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid?>("DeletedBy")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("FromTeamId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("IntakeBatchId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<bool?>("IsActive")
-                        .HasColumnType("bit");
-
-                    b.Property<Guid>("StaffId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("ToTeamId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime>("TransferredAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("UpdateAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid?>("UpdatedBy")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("FromTeamId");
-
-                    b.HasIndex("IntakeBatchId");
-
-                    b.HasIndex("StaffId");
-
-                    b.HasIndex("ToTeamId");
-
-                    b.ToTable("ClassificationBatchTransfers");
                 });
 
             modelBuilder.Entity("DAL.Models.ClassifiedBatch", b =>
@@ -3216,9 +3164,6 @@ namespace DAL.Migrations
                     b.Property<bool?>("IsActive")
                         .HasColumnType("bit");
 
-                    b.Property<string>("ProcessingDirection")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
                         .IsRequired()
@@ -3307,33 +3252,6 @@ namespace DAL.Migrations
                         .IsRequired();
 
                     b.Navigation("Area");
-                });
-
-            modelBuilder.Entity("DAL.Models.ClassificationBatchTransfer", b =>
-                {
-                    b.HasOne("DAL.Models.OperationalTeam", null)
-                        .WithMany()
-                        .HasForeignKey("FromTeamId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("DAL.Models.IntakeBatch", null)
-                        .WithMany()
-                        .HasForeignKey("IntakeBatchId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("DAL.Models.User", null)
-                        .WithMany()
-                        .HasForeignKey("StaffId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("DAL.Models.OperationalTeam", null)
-                        .WithMany()
-                        .HasForeignKey("ToTeamId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("DAL.Models.ClassifiedBatch", b =>

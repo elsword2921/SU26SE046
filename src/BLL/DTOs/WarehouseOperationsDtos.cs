@@ -10,7 +10,7 @@ public record WarehouseAreaLayoutDto(Guid Id, string AreaName, string? Descripti
     string AreaType, decimal CapacityKg, decimal CurrentWeightKg,
     IReadOnlyList<WarehouseGroupLayoutDto> Groups,
     IReadOnlyList<WarehouseLocationLayoutDto> Locations,
-    IReadOnlyList<WarehouseStagingBatchDto> IntakeBatches);
+    IReadOnlyList<WarehouseStagingBatchDto> IntakeBatches, string? ProcessingDirection = null);
 public record WarehouseStagingBatchDto(Guid Id, string BatchCode, string Status,
     decimal TotalWeight, DateTime IntakeDate, int DonationRequests, string? TeamName,
     Guid? StorageLocationId, string? LocationCode, string? GroupName,
@@ -67,7 +67,7 @@ public record WarehouseClassifiedBatchTraceDto(Guid Id, string BatchCode, string
     IReadOnlyList<string> DonationRequestCodes);
 
 public record SaveWarehouseAreaDto(Guid WarehouseId, string AreaName, string? Description,
-    decimal CapacityKg, string AreaType = "Storage");
+    decimal CapacityKg, string AreaType = "Storage", string? ProcessingDirection = null);
 public record CreateWarehouseDto(string WarehouseName, string Address, string? PhoneNumber,
     string? Email, string? Description, decimal TotalCapacityKg, double? Latitude, double? Longitude,
     double ServiceRadiusKm = 24);
