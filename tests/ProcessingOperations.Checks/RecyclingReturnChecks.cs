@@ -169,6 +169,21 @@ internal static class RecyclingReturnChecks
             var warehouse = new WarehouseOperationsService(db);
             await warehouse.ConfirmReceiptAsync(staffId, grouped.Id, new(2, 1, true, null));
             await warehouse.PutawayAsync(staffId, grouped.Id, new(storageLocation.Id, null));
+            var fullList = await warehouse.GetInboundBatchesAsync(staffId, warehouseId);
+            var summaries = await warehouse.GetInboundBatchesAsync(staffId, warehouseId, false);
+            Check(fullList.Single(x => x.Id == grouped.Id).Items.Count == 1
+                && summaries.All(x => x.Items.Count == 0)
+                && fullList.Select(x => x with { Items = Array.Empty<ClassificationItemDto>() })
+                    .Select(x => System.Text.Json.JsonSerializer.Serialize(x))
+                    .SequenceEqual(summaries.Select(x => System.Text.Json.JsonSerializer.Serialize(x))),
+                "warehouse summary omits item payload while preserving batch metadata and order");
+            var dashboard = await warehouse.GetDashboardAsync(staffId, warehouseId);
+            var stockRows = await db.Inventories.AsNoTracking().Where(x => x.WarehouseId == warehouseId && x.IsActive != false).ToListAsync();
+            Check(dashboard.StoredBatches == fullList.Count(x => x.Status == "Stored")
+                && dashboard.AvailableQuantity == stockRows.Sum(x => Math.Max(0, x.Quantity - x.ReservedQuantity))
+                && dashboard.AvailableWeightKg == stockRows.Sum(x => Math.Max(0, x.TotalWeight - x.ReservedWeight))
+                && dashboard.InventorySkuCount == stockRows.Count(x => x.TotalWeight > x.ReservedWeight),
+                "SQL dashboard aggregates preserve stored, available and reserved stock counts");
             var inventory = await db.Inventories.SingleAsync(x => x.ClassifiedBatchId == grouped.Id);
             Check(inventory.Status == "Available" && inventory.ConditionRating == 1 && inventory.Quantity == 1
                 && inventory.TotalWeight == 2 && inventory.ProcessingDirection == "Charity", "recycled return finishes old classification/warehouse flow as fresh available inventory");

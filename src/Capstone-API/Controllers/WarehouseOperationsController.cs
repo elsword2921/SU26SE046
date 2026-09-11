@@ -20,8 +20,8 @@ public class WarehouseOperationsController(IWarehouseOperationsService service) 
         Ok(await service.GetLayoutAsync(CurrentUserId, warehouseId));
 
     [HttpGet("inbound-batches")]
-    public async Task<IActionResult> InboundBatches([FromQuery] Guid? warehouseId) =>
-        Ok(await service.GetInboundBatchesAsync(CurrentUserId, warehouseId));
+    public async Task<IActionResult> InboundBatches([FromQuery] Guid? warehouseId, [FromQuery] bool includeItems = true) =>
+        Ok(await service.GetInboundBatchesAsync(CurrentUserId, warehouseId, includeItems));
 
     [HttpGet("intake-traces")]
     public async Task<IActionResult> IntakeTraces([FromQuery] Guid? warehouseId) =>

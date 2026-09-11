@@ -6,7 +6,7 @@ public interface IWarehouseOperationsService
 {
     Task<WarehouseDashboardDto> GetDashboardAsync(Guid userId, Guid? warehouseId);
     Task<WarehouseLayoutDto> GetLayoutAsync(Guid userId, Guid? warehouseId);
-    Task<IReadOnlyList<WarehouseInboundBatchDto>> GetInboundBatchesAsync(Guid userId, Guid? warehouseId);
+    Task<IReadOnlyList<WarehouseInboundBatchDto>> GetInboundBatchesAsync(Guid userId, Guid? warehouseId, bool includeItems = true);
     Task<IReadOnlyList<WarehouseIntakeTraceDto>> GetIntakeTracesAsync(Guid userId, Guid? warehouseId);
     Task<WarehouseDetailsDto> GetWarehouseAsync(Guid userId, Guid warehouseId);
     Task<Guid> CreateWarehouseAsync(Guid userId, CreateWarehouseDto dto);

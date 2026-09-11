@@ -273,14 +273,19 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
     public async Task<WarehouseDashboardDto> GetDashboardAsync(Guid userId, Guid? requestedWarehouseId)
     {
         var warehouseId = await ResolveWarehouseIdAsync(userId, requestedWarehouseId);
-        var pending = await context.ClassifiedBatches.CountAsync(x => x.WarehouseId == warehouseId
-            && x.IsActive != false && x.Status == "PendingWarehouseReceipt");
-        var putaway = await context.ClassifiedBatches.CountAsync(x => x.WarehouseId == warehouseId
-            && x.IsActive != false && x.Status == "WarehouseReceived");
-        var stored = await context.ClassifiedBatches.CountAsync(x => x.WarehouseId == warehouseId
-            && x.IsActive != false && x.Status == "Stored");
+        var counts = await context.ClassifiedBatches.AsNoTracking()
+            .Where(x => x.WarehouseId == warehouseId && x.IsActive != false)
+            .GroupBy(x => x.Status).Select(g => new { Status = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.Status, x => x.Count);
         var inventory = await context.Inventories.AsNoTracking()
-            .Where(x => x.WarehouseId == warehouseId && x.IsActive != false).ToListAsync();
+            .Where(x => x.WarehouseId == warehouseId && x.IsActive != false)
+            .GroupBy(x => x.WarehouseId).Select(g => new
+            {
+                Weight = g.Sum(x => x.TotalWeight),
+                Quantity = g.Sum(x => x.Quantity > x.ReservedQuantity ? x.Quantity - x.ReservedQuantity : 0),
+                Skus = g.Count(x => x.TotalWeight > x.ReservedWeight),
+                AvailableWeight = g.Sum(x => x.TotalWeight > x.ReservedWeight ? x.TotalWeight - x.ReservedWeight : 0)
+            }).SingleOrDefaultAsync();
         var warehouse = await context.Warehouses.AsNoTracking().FirstAsync(x => x.Id == warehouseId);
         var allocatedAreaCapacity = await context.WarehouseAreas.AsNoTracking()
             .Where(x => x.WarehouseId == warehouseId && x.IsActive != false)
@@ -292,20 +297,23 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
                 && x.CurrentStorageLocationId.HasValue
                 && x.CurrentArea != null && x.CurrentArea.AreaType != "Storage")
             .SumAsync(x => (decimal?)x.TotalWeight) ?? 0;
-        var current = inventory.Sum(x => x.TotalWeight) + stagingWeight;
-        return new WarehouseDashboardDto(pending, putaway, stored,
-            inventory.Sum(x => Math.Max(0, x.Quantity - x.ReservedQuantity)),
-            inventory.Count(x => Math.Max(0, x.TotalWeight - x.ReservedWeight) > 0),
-            inventory.Sum(x => Math.Max(0, x.TotalWeight - x.ReservedWeight)),
+        var current = (inventory?.Weight ?? 0) + stagingWeight;
+        return new WarehouseDashboardDto(counts.GetValueOrDefault("PendingWarehouseReceipt"),
+            counts.GetValueOrDefault("WarehouseReceived"), counts.GetValueOrDefault("Stored"),
+            inventory?.Quantity ?? 0, inventory?.Skus ?? 0, inventory?.AvailableWeight ?? 0,
             capacity <= 0 ? 0 : Math.Round(current / capacity * 100, 2),
             current, capacity);
     }
 
     public async Task<IReadOnlyList<WarehouseInboundBatchDto>> GetInboundBatchesAsync(
-        Guid userId, Guid? requestedWarehouseId)
+        Guid userId, Guid? requestedWarehouseId, bool includeItems = true)
     {
         var warehouseId = await ResolveWarehouseIdAsync(userId, requestedWarehouseId);
-        var batches = await BatchQuery()
+        var query = includeItems ? BatchQuery() : context.ClassifiedBatches.AsNoTracking()
+            .Include(x => x.DonationRequestSources.Where(source => source.IsActive != false))
+                .ThenInclude(x => x.DonationRequest)
+            .Where(x => x.IsActive != false);
+        var batches = await query
             .Where(x => x.WarehouseId == warehouseId && (x.Status == "PendingWarehouseReceipt"
                 || x.Status == "WarehouseReceived" || x.Status == "Stored"))
             .OrderByDescending(x => x.SentToWarehouseAt ?? x.ClassificationDate)
