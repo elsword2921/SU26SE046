@@ -11,7 +11,13 @@ public record ClassificationBatchSummaryDto(Guid Id, string BatchCode, string Ro
     Guid? ClassificationTeamId = null, string? ClassificationTeamName = null,
     string? TeamStatus = null, string? CurrentAreaName = null,
     DateTime? TeamShiftDate = null, TimeSpan? TeamShiftStartTime = null,
-    TimeSpan? TeamShiftEndTime = null);
+    TimeSpan? TeamShiftEndTime = null)
+{
+    public bool IsRecycledReturn { get; init; }
+    public string? SourceOperationCode { get; init; }
+    public string? SourceOrganizationName { get; init; }
+    public IReadOnlyList<string> ImageUrls { get; init; } = [];
+}
 
 public record ClassificationItemDto(Guid Id, string ItemCode, string FabricType, string GarmentGroup,
     string ClothingType, string Gender, string TargetUser, string Size, string ConditionGrade,
@@ -27,7 +33,13 @@ public record ClassificationBatchDetailDto(Guid Id, string BatchCode, string Rou
     DateTime IntakeDate, decimal TotalWeight, string Status, int DonationRequests,
     int? CountedItemCount, decimal? CountedTotalWeight, string? CountingNotes, DateTime? CountedAt,
     string? ClassificationAreaName, DateTime? ClassifiedAreaPlacedAt,
-    IReadOnlyList<ClassificationItemDto> Items);
+    IReadOnlyList<ClassificationItemDto> Items)
+{
+    public bool IsRecycledReturn { get; init; }
+    public string? SourceOperationCode { get; init; }
+    public string? SourceOrganizationName { get; init; }
+    public IReadOnlyList<string> BatchImages { get; init; } = [];
+}
 
 public class CountClassificationBatchDto
 {
@@ -77,7 +89,10 @@ public record GroupedClassifiedBatchDto(Guid Id, string BatchCode, DateTime Clas
     string FabricType, string GarmentGroup, string ClothingType, string Gender, string TargetUser,
     string Size, string ConditionGrade, string ProcessingDirection, int TotalItem, string Status,
     decimal TotalWeight, string? ClassificationAreaName, DateTime? PlacedInClassificationAreaAt,
-    Guid? StorageLocationId, IReadOnlyList<string> DonationRequestCodes);
+    Guid? StorageLocationId, IReadOnlyList<string> DonationRequestCodes)
+{
+    public bool IsRecycledReturn { get; init; }
+}
 
 public record GroupedClassifiedBatchDetailDto(Guid Id, string BatchCode, DateTime ClassificationDate,
     string FabricType, string GarmentGroup, string ClothingType, string Gender, string TargetUser,
