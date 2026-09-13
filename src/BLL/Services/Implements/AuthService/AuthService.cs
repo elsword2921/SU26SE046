@@ -70,14 +70,7 @@ public partial class AuthService(
     public async Task<RegisterResponse> RegisterAsync(RegisterRequest request)
     {
         NormalizeAndValidate(request);
-        var name = request.UserName.ToLowerInvariant();
-        var email = request.Email.ToLowerInvariant();
-        if (await dbContext.Users.AnyAsync(x => x.UserName.ToLower() == name))
-            throw new InvalidOperationException("Username already exists.");
-        if (await dbContext.Users.AnyAsync(x => x.Email.ToLower() == email))
-            throw new InvalidOperationException("Email already exists.");
-        if (await dbContext.Users.AnyAsync(x => x.PhoneNumber == request.PhoneNumber))
-            throw new InvalidOperationException("Phone number already exists.");
+        await EnsureUniqueAsync(request.UserName, request.Email, request.PhoneNumber);
 
         var role = await unitOfWork.RoleRepository.GetWithConditionAsync(x => x.RoleName == "Donor")
             ?? throw new InvalidOperationException("Donor role is not configured.");
@@ -102,6 +95,71 @@ public partial class AuthService(
         }
         return new RegisterResponse(user.Id,
             "Registration successful. A verification code was sent by email.");
+    }
+
+    public async Task<RegisterResponse> RegisterOrganizationAsync(RegisterOrganizationRequest request)
+    {
+        NormalizeAndValidateOrganization(request);
+        await EnsureUniqueAsync(request.UserName, request.Email, request.PhoneNumber);
+        var role = await unitOfWork.RoleRepository.GetWithConditionAsync(
+                x => x.RoleName == request.OrganizationType)
+            ?? throw new InvalidOperationException("Organization role is not configured.");
+        var user = new User
+        {
+            FullName = request.OrganizationName, UserName = request.UserName, Email = request.Email,
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password), RoleId = role.Id,
+            Address = request.Address, PhoneNumber = request.PhoneNumber,
+            OrganizationName = request.OrganizationName, TaxCode = request.TaxCode,
+            CertificateImageUrl = request.CertificateImageUrl,
+            UserStatus = "PendingApproval", EmailConfirmed = false,
+            IsActive = false, CreateAt = VietnamTime.Now
+        };
+        dbContext.Users.Add(user);
+        await dbContext.SaveChangesAsync();
+        return new RegisterResponse(user.Id,
+            "Organization registration submitted. The account becomes available after manager approval.");
+    }
+
+    private async Task EnsureUniqueAsync(string userName, string email, string phoneNumber)
+    {
+        var name = userName.ToLowerInvariant();
+        var normalizedEmail = email.ToLowerInvariant();
+        if (await dbContext.Users.AnyAsync(x => x.UserName.ToLower() == name))
+            throw new InvalidOperationException("Username already exists.");
+        if (await dbContext.Users.AnyAsync(x => x.Email.ToLower() == normalizedEmail))
+            throw new InvalidOperationException("Email already exists.");
+        if (await dbContext.Users.AnyAsync(x => x.PhoneNumber == phoneNumber))
+            throw new InvalidOperationException("Phone number already exists.");
+    }
+
+    private void NormalizeAndValidateOrganization(RegisterOrganizationRequest r)
+    {
+        var orgTypes = new[] { "CharityOrganization", "RecyclingOrganization", "DisposalOrganization" };
+        r.OrganizationType = (r.OrganizationType ?? "").Trim();
+        if (!orgTypes.Contains(r.OrganizationType))
+            throw new InvalidOperationException("Organization type must be CharityOrganization, RecyclingOrganization or DisposalOrganization.");
+        r.OrganizationName = (r.OrganizationName ?? "").Trim();
+        r.TaxCode = (r.TaxCode ?? "").Trim();
+        r.Address = (r.Address ?? "").Trim();
+        r.UserName = (r.UserName ?? "").Trim();
+        r.Email = (r.Email ?? "").Trim().ToLowerInvariant();
+        r.PhoneNumber = Regex.Replace(r.PhoneNumber ?? "", @"[\s.\-()]", "");
+        if (r.OrganizationName.Length is < 2 or > 200)
+            throw new InvalidOperationException("Organization name must contain 2-200 characters.");
+        if (string.IsNullOrWhiteSpace(r.TaxCode))
+            throw new InvalidOperationException("Tax code is required.");
+        if (string.IsNullOrWhiteSpace(r.Address))
+            throw new InvalidOperationException("Organization address is required.");
+        if (string.IsNullOrWhiteSpace(r.CertificateImageUrl))
+            throw new InvalidOperationException("A certificate file is required.");
+        if (!UserNameRegex().IsMatch(r.UserName))
+            throw new InvalidOperationException("Username must be 3-30 characters and contain only letters, numbers, dots or underscores.");
+        if (!EmailRegex().IsMatch(r.Email) || r.Email.Length > 254)
+            throw new InvalidOperationException("Email format is invalid.");
+        if (!VietnamPhoneRegex().IsMatch(r.PhoneNumber))
+            throw new InvalidOperationException("Phone number must be a valid Vietnamese mobile number.");
+        if (r.PhoneNumber.StartsWith("+84")) r.PhoneNumber = "0" + r.PhoneNumber[3..];
+        ValidatePassword(r.Password);
     }
 
     public async Task<VerificationResponse> VerifyRegistrationAsync(VerifyRegistrationRequest request)

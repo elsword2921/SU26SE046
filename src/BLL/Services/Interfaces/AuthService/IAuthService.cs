@@ -5,6 +5,7 @@ namespace BLL.Services.Interfaces.AuthService;
 public interface IAuthService
 {
     Task<RegisterResponse> RegisterAsync(RegisterRequest request);
+    Task<RegisterResponse> RegisterOrganizationAsync(RegisterOrganizationRequest request);
     Task<AuthResponse> LoginAsync(LoginRequest request);
     Task<CurrentUserProfileDto> GetCurrentUserProfileAsync(Guid userId);
     Task<VerificationResponse> VerifyRegistrationAsync(VerifyRegistrationRequest request);

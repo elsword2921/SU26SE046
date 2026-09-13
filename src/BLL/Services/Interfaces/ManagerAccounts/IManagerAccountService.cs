@@ -9,4 +9,7 @@ public interface IManagerAccountService
     Task UpdateAsync(Guid managerId, Guid userId, UpdateManagerAccountDto dto);
     Task SetLockedAsync(Guid managerId, Guid userId, bool locked);
     Task DeleteAsync(Guid managerId, Guid userId);
+    Task<IReadOnlyList<PendingOrganizationDto>> GetPendingOrganizationsAsync();
+    Task ApproveOrganizationAsync(Guid managerId, Guid userId);
+    Task RejectOrganizationAsync(Guid managerId, Guid userId, RejectOrganizationDto dto);
 }

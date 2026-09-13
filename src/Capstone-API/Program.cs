@@ -231,6 +231,15 @@ app.UseHttpsRedirection();
 
 app.UseCors("React");
 
+// Serve uploaded organization certificates (wwwroot/uploads/...) via CertificateImageUrl.
+// Explicit FileProvider: WebRootPath stays null when wwwroot does not exist at startup
+// (fresh checkout before the first certificate upload), which silently disables UseStaticFiles().
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(
+        Path.Combine(app.Environment.ContentRootPath, "wwwroot"))
+});
+
 app.UseAuthentication();
 
 app.UseAuthorization();
