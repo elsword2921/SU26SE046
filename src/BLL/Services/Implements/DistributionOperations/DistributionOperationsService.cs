@@ -14,66 +14,37 @@ namespace BLL.Services.Implements.DistributionOperations;
 
 public class DistributionOperationsService(AppDbContext context, HttpClient ghnClient, IConfiguration configuration)
 {
-    public async Task<object> CatalogAsync(Guid? warehouseId)
+    public async Task<CharityRequestCriteriaDto> GetRequestCriteriaAsync()
     {
-        var warehouses = await context.Warehouses.AsNoTracking().Where(x => x.IsActive != false)
-            .OrderBy(x => x.WarehouseName).Select(x => new { x.Id, x.WarehouseName, x.Address }).ToListAsync();
-        var query = context.Inventories.AsNoTracking().Include(x => x.ClassifiedBatch)!.ThenInclude(x => x!.Items)
-            .Where(x => x.IsActive != false && x.Status == "Available" && x.ProcessingDirection == "Charity"
-                && x.TotalWeight > x.ReservedWeight);
-        if (warehouseId.HasValue) query = query.Where(x => x.WarehouseId == warehouseId);
-        var rows = await query.OrderBy(x => x.Sku).ToListAsync();
-        var rowIds = rows.Select(x => x.Id).ToList();
-        var lockedIds = (await context.DistributionItems.AsNoTracking()
-            .Where(item => rowIds.Contains(item.InventoryId) && item.IsActive != false
-                && item.DistributionRequest.IsActive != false
-                && item.DistributionRequest.Status != "Rejected"
-                && item.DistributionRequest.Status != "Cancelled")
-            .Select(item => item.InventoryId).Distinct().ToListAsync()).ToHashSet();
-        var items = rows.Select(x => new DistributionCatalogItemDto(x.Id, x.ClassifiedBatchId!.Value,
-            x.ClassifiedBatch!.BatchCode, x.Sku, x.ClothingType, x.FabricType, x.Gender, x.TargetUser, x.Size,
-            Grade(x.ConditionRating), x.Quantity - x.ReservedQuantity, x.TotalWeight - x.ReservedWeight,
-            lockedIds.Contains(x.Id), lockedIds.Contains(x.Id)
-                ? "Batch đang được giữ cho một yêu cầu phân phối khác." : null,
-            x.ClassifiedBatch.Items.Where(i => i.IsActive != false).Select(i => new DistributionCatalogImageDto(
-                i.ItemCode, i.ClothingType, i.FabricType, i.Gender, i.TargetUser, i.Size, i.ImageUrls ?? [], i.Notes)).ToList())).ToList();
-        return new { warehouses, items };
+        var categories = await context.Categories.AsNoTracking()
+            .Where(x => x.IsActive != false)
+            .OrderBy(x => x.SortOrder).ThenBy(x => x.Name)
+            .ToListAsync();
+        IReadOnlyList<CategoryOptionDto> OfType(string type) => categories
+            .Where(x => x.Type == type)
+            .Select(x => new CategoryOptionDto(x.Id, x.Code, x.Name, x.ParentId, x.SortOrder))
+            .ToList();
+        return new CharityRequestCriteriaDto(OfType("ClothingType"), OfType("Gender"),
+            OfType("Size"), OfType("TargetUser"));
     }
 
-    public async Task<Guid> CreateAsync(Guid organizationId, CreateDistributionRequestDto dto)
+    public async Task<Guid> CreateAsync(Guid organizationId, CreateCharityDistributionRequestDto dto)
     {
         await using var tx = await context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
-        ValidateRequest(dto);
-        if (dto.Items.Count == 0) throw new InvalidOperationException("Select at least one batch.");
-        var ids = dto.Items.Select(x => x.InventoryId).Distinct().ToList();
-        if (ids.Count != dto.Items.Count) throw new InvalidOperationException("A batch can only appear once.");
-        var lockedIds = await context.DistributionItems
-            .Where(item => ids.Contains(item.InventoryId) && item.IsActive != false
-                && item.DistributionRequest.IsActive != false
-                && item.DistributionRequest.Status != "Rejected"
-                && item.DistributionRequest.Status != "Cancelled")
-            .Select(item => item.InventoryId).Distinct().ToListAsync();
-        if (lockedIds.Count > 0)
-            throw new InvalidOperationException("One or more batches already belong to another distribution request.");
-        var inventories = await context.Inventories.Where(x => ids.Contains(x.Id) && x.IsActive != false
-            && x.WarehouseId == dto.WarehouseId && x.ProcessingDirection == "Charity" && x.Status == "Available").ToListAsync();
-        if (inventories.Count != ids.Count) throw new InvalidOperationException("One or more batches are unavailable or belong to another warehouse.");
+        ValidateDeliveryInfo(dto.WarehouseId, dto.RecipientName, dto.RecipientPhone, dto.ToAddress, dto.Notes);
+        await ValidateCriteriaAsync(dto);
         var requestId = Guid.NewGuid();
         var request = new DistributionRequest { Id=requestId, RequestCode=BuildRequestCode(requestId), UserId=organizationId, WarehouseId=dto.WarehouseId,
             RecipientName=dto.RecipientName.Trim(), RecipientPhone=dto.RecipientPhone.Trim(), ToAddress=dto.ToAddress.Trim(),
-            RequestNotes=dto.Notes, RequestedAt=DateTime.UtcNow, Status="PendingManagerApproval", CreateAt=DateTime.UtcNow, IsActive=true };
-        foreach (var input in dto.Items)
-        {
-            var inventory=inventories.Single(x=>x.Id==input.InventoryId); var available=inventory.TotalWeight-inventory.ReservedWeight;
-            if (available <= 0) throw new InvalidOperationException($"Inventory {inventory.Sku} has no available weight.");
-            request.Items.Add(new DistributionItem { Id=Guid.NewGuid(), InventoryId=inventory.Id,
-                ConditionRating=inventory.ConditionRating, RequestedQuantity=0,
-                RequestedWeight=Math.Round(available,2), CreateAt=DateTime.UtcNow, IsActive=true });
-        }
+            RequestNotes=dto.Notes,
+            RequestedClothingTypeId=dto.RequestedClothingTypeId, RequestedGenderId=dto.RequestedGenderId,
+            RequestedSizeId=dto.RequestedSizeId, RequestedTargetUserId=dto.RequestedTargetUserId,
+            RequestedWeightKg=dto.RequestedWeightKg, RequestedQuantity=dto.RequestedQuantity,
+            RequestedAt=DateTime.UtcNow, Status="PendingManagerApproval", CreateAt=DateTime.UtcNow, IsActive=true };
         context.DistributionRequests.Add(request);
         var managers=await context.Users.Where(x=>x.IsActive!=false&&x.Role.RoleName=="Manager").Select(x=>x.Id).ToListAsync();
         foreach(var id in managers) NotificationWriter.NotifyUser(context,id,"DistributionRequested","Yêu cầu nhận đồ từ thiện mới",
-            $"Tổ chức {request.RecipientName} vừa tạo yêu cầu gồm {request.Items.Sum(x=>x.RequestedWeight):0.##} kg.",
+            $"Tổ chức {request.RecipientName} vừa tạo yêu cầu {dto.RequestedWeightKg:0.##} kg theo tiêu chí lựa chọn.",
             $"/manager/distributions?requestId={request.Id}",organizationId);
         await context.SaveChangesAsync();
         await tx.CommitAsync();
@@ -85,8 +56,7 @@ public class DistributionOperationsService(AppDbContext context, HttpClient ghnC
         var organization = await context.Users.Include(x => x.Role).FirstOrDefaultAsync(x => x.Id == dto.OrganizationId && x.IsActive != false)
             ?? throw new KeyNotFoundException("Recycling or disposal organization not found.");
         var processingDirection = GetProcessingDirection(organization.Role.RoleName);
-        ValidateRequest(new CreateDistributionRequestDto(dto.WarehouseId, organization.FullName, organization.PhoneNumber,
-            organization.Address, dto.Notes, dto.Items.Select(x => new CreateDistributionItemDto(x.InventoryId)).ToList()));
+        ValidateDeliveryInfo(dto.WarehouseId, organization.FullName, organization.PhoneNumber, organization.Address, dto.Notes);
         if (dto.Items.Count == 0) throw new InvalidOperationException("Select at least one batch.");
         var ids = dto.Items.Select(x => x.InventoryId).Distinct().ToList();
         if (ids.Count != dto.Items.Count)throw new InvalidOperationException("A batch can only appear once.");
@@ -118,46 +88,29 @@ public class DistributionOperationsService(AppDbContext context, HttpClient ghnC
         await context.SaveChangesAsync(); return request.Id;
     }
 
-    public async Task UpdateAsync(Guid organizationId, Guid id, CreateDistributionRequestDto dto)
+    public async Task UpdateAsync(Guid organizationId, Guid id, CreateCharityDistributionRequestDto dto)
     {
         await using var tx = await context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
-        ValidateRequest(dto);
+        ValidateDeliveryInfo(dto.WarehouseId, dto.RecipientName, dto.RecipientPhone, dto.ToAddress, dto.Notes);
+        await ValidateCriteriaAsync(dto);
         var request = await context.DistributionRequests.Include(x => x.Items)
             .FirstOrDefaultAsync(x => x.Id == id && x.UserId == organizationId && x.IsActive != false)
             ?? throw new KeyNotFoundException("Distribution request not found.");
         if (request.Status != "PendingManagerApproval")
             throw new InvalidOperationException("Only requests awaiting manager approval can be edited.");
-        if (dto.Items.Count == 0) throw new InvalidOperationException("Select at least one batch.");
-        var ids = dto.Items.Select(x => x.InventoryId).Distinct().ToList();
-        if (ids.Count != dto.Items.Count) throw new InvalidOperationException("A batch can only appear once.");
-        var lockedIds = await context.DistributionItems
-            .Where(item => ids.Contains(item.InventoryId) && item.DistributionRequestId != id
-                && item.IsActive != false && item.DistributionRequest.IsActive != false
-                && item.DistributionRequest.Status != "Rejected"
-                && item.DistributionRequest.Status != "Cancelled")
-            .Select(item => item.InventoryId).Distinct().ToListAsync();
-        if (lockedIds.Count > 0)
-            throw new InvalidOperationException("One or more batches already belong to another distribution request.");
-        var inventories = await context.Inventories.Where(x => ids.Contains(x.Id) && x.IsActive != false
-            && x.WarehouseId == dto.WarehouseId && x.ProcessingDirection == "Charity" && x.Status == "Available").ToListAsync();
-        if (inventories.Count != ids.Count) throw new InvalidOperationException("One or more batches are unavailable or belong to another warehouse.");
-
-        context.DistributionItems.RemoveRange(request.Items);
-        request.Items.Clear();
-        foreach (var input in dto.Items)
-        {
-            var inventory = inventories.Single(x => x.Id == input.InventoryId);
-            var available = inventory.TotalWeight - inventory.ReservedWeight;
-            if (available <= 0) throw new InvalidOperationException($"Inventory {inventory.Sku} has no available weight.");
-            request.Items.Add(new DistributionItem { Id = Guid.NewGuid(), InventoryId = inventory.Id,
-                ConditionRating = inventory.ConditionRating, RequestedQuantity = 0,
-                RequestedWeight = Math.Round(available, 2), CreateAt = DateTime.UtcNow, IsActive = true });
-        }
+        if (request.Items.Count > 0)
+            throw new InvalidOperationException("This request was created with specific batches and cannot be edited here.");
         request.WarehouseId = dto.WarehouseId;
         request.RecipientName = dto.RecipientName.Trim();
         request.RecipientPhone = dto.RecipientPhone.Trim();
         request.ToAddress = dto.ToAddress.Trim();
         request.RequestNotes = dto.Notes;
+        request.RequestedClothingTypeId = dto.RequestedClothingTypeId;
+        request.RequestedGenderId = dto.RequestedGenderId;
+        request.RequestedSizeId = dto.RequestedSizeId;
+        request.RequestedTargetUserId = dto.RequestedTargetUserId;
+        request.RequestedWeightKg = dto.RequestedWeightKg;
+        request.RequestedQuantity = dto.RequestedQuantity;
         request.UpdateAt = DateTime.UtcNow;
         var managers = await context.Users.Where(x => x.IsActive != false && x.Role.RoleName == "Manager").Select(x => x.Id).ToListAsync();
         foreach (var managerId in managers) NotificationWriter.NotifyUser(context, managerId, "DistributionUpdated",
@@ -195,7 +148,10 @@ public class DistributionOperationsService(AppDbContext context, HttpClient ghnC
         var request=await context.DistributionRequests.Include(x=>x.Items).ThenInclude(x=>x.Inventory)
             .FirstOrDefaultAsync(x=>x.Id==id&&x.Status=="PendingManagerApproval")??throw new InvalidOperationException("Pending request not found.");
         if(!dto.Approved){request.Status="Rejected";request.RejectReason=dto.Notes;NotificationWriter.NotifyUser(context,request.UserId,"DistributionRejected","Yêu cầu chưa được duyệt",dto.Notes??"Manager đã từ chối yêu cầu.",$"/organization/distributions/{id}",managerId);await context.SaveChangesAsync();await tx.CommitAsync();return;}
-        foreach(var item in request.Items){var inv=item.Inventory;var available=inv.TotalWeight-inv.ReservedWeight;if(item.RequestedWeight>available)throw new InvalidOperationException($"Insufficient inventory weight for {inv.Sku}.");inv.ReservedWeight+=item.RequestedWeight;item.ApprovedQuantity=0;}
+        if (request.RequestedClothingTypeId.HasValue)
+            await AutoMatchCriteriaInventoriesAsync(request);
+        else
+            foreach(var item in request.Items){var inv=item.Inventory;var available=inv.TotalWeight-inv.ReservedWeight;if(item.RequestedWeight>available)throw new InvalidOperationException($"Insufficient inventory weight for {inv.Sku}.");inv.ReservedWeight+=item.RequestedWeight;item.ApprovedQuantity=0;}
         request.Status="ApprovedAwaitingWarehouse";request.ApprovedAt=DateTime.UtcNow;request.ApprovedByManagerId=managerId;
         var staff=await context.Users.Where(x=>x.WarehouseId==request.WarehouseId&&x.IsActive!=false&&x.Role.RoleName=="WarehouseStaff").Select(x=>x.Id).ToListAsync();
         foreach(var userId in staff)NotificationWriter.NotifyUser(context,userId,"DistributionApproved","Có yêu cầu xuất kho mới",$"Yêu cầu của {request.RecipientName} đã được duyệt.",$"/warehouse/distributions?requestId={id}",managerId);
@@ -358,15 +314,81 @@ public class DistributionOperationsService(AppDbContext context, HttpClient ghnC
         .Include(x=>x.ShipmentHistory).OrderByDescending(x=>x.RequestedAt);
     private static System.Linq.Expressions.Expression<Func<DistributionRequest,DistributionRequestViewDto>> Map()=>x=>new DistributionRequestViewDto(x.Id,x.RequestCode,x.UserId,x.User.FullName,x.WarehouseId,x.Warehouse.WarehouseName,x.Warehouse.Address,x.Warehouse.PhoneNumber,x.RecipientName,x.RecipientPhone,x.ToAddress,x.Status,x.RequestNotes,x.RejectReason,x.RequestedAt,x.ApprovedAt,x.IssueSlipCode,x.WarehouseIssuedAt,x.WarehouseIssuedByStaff!=null?x.WarehouseIssuedByStaff.FullName:null,x.GhnOrderCode,x.GhnStatus,x.GhnUpdatedAt,x.Items.Select(i=>new DistributionItemViewDto(i.Id,i.InventoryId,i.Inventory.ClassifiedBatch!.BatchCode,i.Inventory.Sku,i.Inventory.ClothingType,i.Inventory.FabricType,i.Inventory.Gender,i.Inventory.TargetUser,i.Inventory.Size,i.RequestedQuantity,i.ApprovedQuantity,i.IssuedQuantity,i.RequestedWeight,i.IssuedWeight)).ToList(),x.ShipmentHistory.OrderByDescending(h=>h.OccurredAt).Select(h=>new ShipmentEventDto(h.Status,h.Description,h.Source,h.OccurredAt)).ToList());
     private static string BuildRequestCode(Guid id)=>$"DIST-{id.ToString("N")[..8].ToUpperInvariant()}";
-    private static string Grade(int value)=>value==1?"A":value==2?"B":"C";
-    private static void ValidateRequest(CreateDistributionRequestDto dto)
+
+    /// <summary>
+    /// Auto-matches Available Charity inventories to a criteria-based request until the requested
+    /// weight is reached, creating DistributionItems and reserving the matched weight.
+    /// </summary>
+    private async Task AutoMatchCriteriaInventoriesAsync(DistributionRequest request)
     {
-        if (dto.WarehouseId == Guid.Empty) throw new InvalidOperationException("Warehouse is required.");
-        if (string.IsNullOrWhiteSpace(dto.RecipientName)) throw new InvalidOperationException("Recipient name is required.");
-        if (string.IsNullOrWhiteSpace(dto.RecipientPhone)) throw new InvalidOperationException("Recipient phone is required.");
-        if (string.IsNullOrWhiteSpace(dto.ToAddress)) throw new InvalidOperationException("Delivery address is required.");
-        if (string.IsNullOrWhiteSpace(dto.Notes)) throw new InvalidOperationException("Purpose and notes are required.");
-        var phone = System.Text.RegularExpressions.Regex.Replace(dto.RecipientPhone, @"[\s.\-()]", "");
+        var lockedIds = (await context.DistributionItems.AsNoTracking()
+            .Where(item => item.IsActive != false && item.DistributionRequest.IsActive != false
+                && item.DistributionRequest.Status != "Rejected"
+                && item.DistributionRequest.Status != "Cancelled")
+            .Select(item => item.InventoryId).Distinct().ToListAsync()).ToHashSet();
+        var candidates = await context.Inventories
+            .Where(x => x.IsActive != false && x.Status == "Available" && x.ProcessingDirection == "Charity"
+                && x.WarehouseId == request.WarehouseId
+                && x.ClothingTypeId == request.RequestedClothingTypeId
+                && (request.RequestedGenderId == null || x.GenderId == request.RequestedGenderId)
+                && (request.RequestedSizeId == null || x.SizeId == request.RequestedSizeId)
+                && (request.RequestedTargetUserId == null || x.TargetUserId == request.RequestedTargetUserId)
+                && x.TotalWeight > x.ReservedWeight)
+            .OrderBy(x => x.CreateAt)
+            .ToListAsync();
+        var target = request.RequestedWeightKg!.Value;
+        decimal accumulated = 0;
+        foreach (var inventory in candidates)
+        {
+            if (lockedIds.Contains(inventory.Id) || request.Items.Any(i => i.InventoryId == inventory.Id)) continue;
+            var take = Math.Round(Math.Min(inventory.TotalWeight - inventory.ReservedWeight, target - accumulated), 2);
+            if (take <= 0) continue;
+            var item = new DistributionItem { Id = Guid.NewGuid(), InventoryId = inventory.Id,
+                ConditionRating = inventory.ConditionRating, RequestedQuantity = 0,
+                RequestedWeight = take, ApprovedQuantity = 0, CreateAt = DateTime.UtcNow, IsActive = true };
+            request.Items.Add(item);
+            // Nav fixup on an already-tracked request tracks preset-key entities as modified
+            // (UPDATE against a nonexistent row -> concurrency exception); force INSERT.
+            context.DistributionItems.Add(item);
+            inventory.ReservedWeight += take;
+            accumulated += take;
+            if (accumulated >= target) break;
+        }
+        if (accumulated < target)
+            throw new InvalidOperationException(
+                $"Insufficient available inventory matching the request criteria ({accumulated:0.##}/{target:0.##} kg). Please reject the request or adjust the inventory.");
+    }
+
+    private async Task ValidateCriteriaAsync(CreateCharityDistributionRequestDto dto)
+    {
+        if (dto.RequestedWeightKg <= 0)
+            throw new InvalidOperationException("Requested weight must be greater than zero.");
+        if (dto.RequestedQuantity is <= 0)
+            throw new InvalidOperationException("Requested quantity must be greater than zero when provided.");
+        if (!dto.RequestedClothingTypeId.HasValue)
+            throw new InvalidOperationException("Clothing type is required.");
+        var checks = new (Guid? Id, string Type)[]
+        {
+            (dto.RequestedClothingTypeId, "ClothingType"), (dto.RequestedGenderId, "Gender"),
+            (dto.RequestedSizeId, "Size"), (dto.RequestedTargetUserId, "TargetUser")
+        };
+        foreach (var (id, type) in checks)
+        {
+            if (!id.HasValue) continue;
+            if (!await context.Categories.AnyAsync(x => x.Id == id && x.Type == type && x.IsActive != false))
+                throw new InvalidOperationException($"The selected {type.ToLowerInvariant()} is invalid.");
+        }
+    }
+
+    private static void ValidateDeliveryInfo(Guid warehouseId, string recipientName, string recipientPhone,
+        string toAddress, string? notes)
+    {
+        if (warehouseId == Guid.Empty) throw new InvalidOperationException("Warehouse is required.");
+        if (string.IsNullOrWhiteSpace(recipientName)) throw new InvalidOperationException("Recipient name is required.");
+        if (string.IsNullOrWhiteSpace(recipientPhone)) throw new InvalidOperationException("Recipient phone is required.");
+        if (string.IsNullOrWhiteSpace(toAddress)) throw new InvalidOperationException("Delivery address is required.");
+        if (string.IsNullOrWhiteSpace(notes)) throw new InvalidOperationException("Purpose and notes are required.");
+        var phone = System.Text.RegularExpressions.Regex.Replace(recipientPhone, @"[\s.\-()]", "");
         if (!System.Text.RegularExpressions.Regex.IsMatch(phone, @"^(?:\+84|0)(?:3|5|7|8|9)\d{8}$"))
             throw new InvalidOperationException("Recipient phone is invalid.");
     }

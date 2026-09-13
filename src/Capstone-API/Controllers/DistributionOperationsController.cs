@@ -12,12 +12,12 @@ public class DistributionOperationsController(DistributionOperationsService serv
     IHttpClientFactory httpClientFactory, IConfiguration configuration):ControllerBase
 {
     private Guid UserId=>Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-    [HttpGet("catalog"),Authorize(Roles="CharityOrganization")]
-    public async Task<IActionResult> Catalog([FromQuery]Guid? warehouseId)=>Ok(await service.CatalogAsync(warehouseId));
+    [HttpGet("request-criteria"),Authorize(Roles="CharityOrganization")]
+    public async Task<IActionResult> RequestCriteria()=>Ok(await service.GetRequestCriteriaAsync());
     [HttpPost,Authorize(Roles="CharityOrganization")]
-    public async Task<IActionResult> Create(CreateDistributionRequestDto dto)=>Ok(new{id=await service.CreateAsync(UserId,dto)});
+    public async Task<IActionResult> Create(CreateCharityDistributionRequestDto dto)=>Ok(new{id=await service.CreateAsync(UserId,dto)});
     [HttpPut("{id:guid}"),Authorize(Roles="CharityOrganization")]
-    public async Task<IActionResult> Update(Guid id,CreateDistributionRequestDto dto){await service.UpdateAsync(UserId,id,dto);return NoContent();}
+    public async Task<IActionResult> Update(Guid id,CreateCharityDistributionRequestDto dto){await service.UpdateAsync(UserId,id,dto);return NoContent();}
     [HttpDelete("{id:guid}"),Authorize(Roles="CharityOrganization")]
     public async Task<IActionResult> Delete(Guid id){await service.DeleteAsync(UserId,id);return NoContent();}
     [HttpGet("mine"),Authorize(Roles="CharityOrganization")]
