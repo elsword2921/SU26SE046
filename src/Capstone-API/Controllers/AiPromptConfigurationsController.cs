@@ -23,9 +23,9 @@ public class AiPromptConfigurationsController(AppDbContext context) : Controller
         var value = await context.AiPromptConfigurations.AsNoTracking()
             .FirstOrDefaultAsync(x => x.Feature == ClassificationFeature && x.IsActive != false);
         return Ok(value is null
-            ? new AiPromptConfigurationDto(null, ClassificationFeature, "Prompt phân loại mặc định", DefaultClassificationPrompt, true, true, null)
+            ? new AiPromptConfigurationDto(null, ClassificationFeature, "Prompt phân loại mặc định", DefaultClassificationPrompt, true, true, null, null, null)
             : new AiPromptConfigurationDto(value.Id, value.Feature, value.Name, value.PromptText,
-                value.Enabled, false, value.UpdateAt ?? value.CreateAt));
+                value.Enabled, false, value.UpdateAt ?? value.CreateAt, value.DailyRequestLimit, value.TotalRequestLimit));
     }
 
     [HttpPut("classification")]
@@ -34,6 +34,8 @@ public class AiPromptConfigurationsController(AppDbContext context) : Controller
         if (string.IsNullOrWhiteSpace(dto.Name)) throw new InvalidOperationException("Prompt name is required.");
         if (string.IsNullOrWhiteSpace(dto.PromptText)) throw new InvalidOperationException("Prompt content is required.");
         if (dto.PromptText.Length > 12000) throw new InvalidOperationException("Prompt cannot exceed 12,000 characters.");
+        if (dto.DailyRequestLimit is < 1) throw new InvalidOperationException("Daily request limit must be at least 1 when set.");
+        if (dto.TotalRequestLimit is < 1) throw new InvalidOperationException("Total request limit must be at least 1 when set.");
         var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
         var value = await context.AiPromptConfigurations
             .FirstOrDefaultAsync(x => x.Feature == ClassificationFeature);
@@ -44,6 +46,7 @@ public class AiPromptConfigurationsController(AppDbContext context) : Controller
             context.AiPromptConfigurations.Add(value);
         }
         value.Name = dto.Name.Trim(); value.PromptText = dto.PromptText.Trim(); value.Enabled = dto.Enabled;
+        value.DailyRequestLimit = dto.DailyRequestLimit; value.TotalRequestLimit = dto.TotalRequestLimit;
         value.IsActive = true; value.UpdateAt = DateTime.UtcNow; value.UpdatedBy = userId;
         await context.SaveChangesAsync();
         return NoContent();

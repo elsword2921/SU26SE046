@@ -34,7 +34,7 @@ public class ClassificationOperationsController(IClassificationOperationsService
     [RequestSizeLimit(50_000_000)]
     public async Task<IActionResult> AnalyzeImages(AnalyzeClassificationImagesDto dto,
         CancellationToken cancellationToken) =>
-        Ok(await aiService.AnalyzeAsync(await service.GetCatalogAsync(), dto, cancellationToken));
+        Ok(await aiService.AnalyzeAsync(CurrentUserId, await service.GetCatalogAsync(), dto, cancellationToken));
 
     [HttpPost("batches/{batchId:guid}/start")]
     public async Task<IActionResult> Start(Guid batchId)
