@@ -80,6 +80,11 @@ public class ReceivingOperationsController(IReceivingOperationsService service) 
     [Authorize(Roles = "Manager")]
     public async Task<IActionResult> ManagerSetup() => Ok(await service.GetManagerSetupAsync());
 
+    [HttpGet("my-warehouse-layout")]
+    [Authorize(Roles = "ReceivingStaff")]
+    public async Task<IActionResult> MyWarehouseLayout()
+        => Ok(await service.GetMyWarehouseLayoutAsync(CurrentUserId));
+
     [HttpGet("manager/warehouses")]
     [Authorize(Roles = "Manager")]
     public async Task<IActionResult> ManagerWarehouses()

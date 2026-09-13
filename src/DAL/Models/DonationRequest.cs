@@ -29,6 +29,14 @@ namespace DAL.Models
 
         public decimal EstimateWeight { get; set; }
 
+        public int EstimatedItemCount { get; set; }
+
+        public decimal EstimatedVolumeLiters { get; set; }
+
+        public double? PickupLatitude { get; set; }
+
+        public double? PickupLongitude { get; set; }
+
         public decimal? ActualWeight { get; set; }
 
         public string PickupAddress { get; set; } = string.Empty;

@@ -596,10 +596,30 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
                 x.ShiftId == shift.Id && x.IsActive != false && x.TeamType == "ReceivingWarehouse"))
             throw new InvalidOperationException("This shift already has a warehouse receiving team.");
 
+        // Per-shift receiving quota split by vehicle type (feedback 11/09). Required for
+        // pickup teams; warehouse/classification teams carry no vehicle quota.
+        string? vehicleType = null;
+        int? maxOrders = null;
+        decimal? maxKg = null;
+        if (teamType == "ReceivingPickup")
+        {
+            vehicleType = dto.VehicleType?.Trim();
+            if (vehicleType is not ("Motorbike" or "Car"))
+                throw new InvalidOperationException("A pickup team must declare its vehicle type: Motorbike or Car.");
+            maxOrders = dto.MaxOrdersPerShift;
+            maxKg = dto.MaxKgPerShift;
+            if (maxOrders is < 1 or > 200)
+                throw new InvalidOperationException("Max orders per shift must be between 1 and 200.");
+            if (maxKg is < 1 or > 5000)
+                throw new InvalidOperationException("Max kg per shift must be between 1 and 5000.");
+        }
+
         var team = new OperationalTeam
         {
             Id = Guid.NewGuid(), ShiftId = shift.Id, TeamName = dto.TeamName,
-            TeamType = teamType, Status = "Scheduled", CreateAt = DateTime.UtcNow
+            TeamType = teamType, VehicleType = vehicleType,
+            MaxOrdersPerShift = maxOrders, MaxKgPerShift = maxKg,
+            Status = "Scheduled", CreateAt = DateTime.UtcNow
         };
         context.OperationalTeams.Add(team);
         context.TeamMembers.AddRange(dto.StaffIds.Select(id => new TeamMember
@@ -678,6 +698,35 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
         await context.SaveChangesAsync();
     }
 
+    private async Task<(int UsedOrders, decimal UsedKg)> GetTeamQuotaUsageAsync(Guid teamId)
+    {
+        var usage = await context.PickupAssignments.AsNoTracking()
+            .Where(x => x.TeamId == teamId && x.IsActive != false && x.Status == "Pending")
+            .Join(context.DonationRequests,
+                assignment => assignment.DonorRequestId, request => request.Id,
+                (assignment, request) => new { request.EstimateWeight })
+            .ToListAsync();
+        return (usage.Count, usage.Sum(x => x.EstimateWeight));
+    }
+
+    /// <summary>
+    /// Enforces the per-shift vehicle quota (max orders / max kg) declared on a pickup team.
+    /// Returns false when adding the request would exceed either quota.
+    /// </summary>
+    private static bool CanTakeRequest(OperationalTeam team, int usedOrders, decimal usedKg,
+        decimal requestWeightKg)
+    {
+        if (team.TeamType != "ReceivingPickup") return true;
+        if (team.MaxOrdersPerShift.HasValue && usedOrders + 1 > team.MaxOrdersPerShift.Value) return false;
+        if (team.MaxKgPerShift.HasValue && usedKg + requestWeightKg > team.MaxKgPerShift.Value) return false;
+        return true;
+    }
+
+    private static string DescribeQuota(OperationalTeam team) =>
+        team.MaxOrdersPerShift.HasValue || team.MaxKgPerShift.HasValue
+            ? $" ({team.VehicleType ?? "xe"}: tối đa {team.MaxOrdersPerShift?.ToString() ?? "∞"} đơn / {team.MaxKgPerShift?.ToString("0.#") ?? "∞"} kg mỗi ca)"
+            : string.Empty;
+
     public async Task<int> PlanShiftAsync(PlanReceivingShiftDto dto)
     {
         var shift = await context.Shifts.FirstOrDefaultAsync(x => x.Id == dto.ShiftId && x.IsActive != false)
@@ -708,6 +757,7 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
 
         if (candidates.Count == 0) return 0;
 
+        var (usedOrders, usedKg) = await GetTeamQuotaUsageAsync(team.Id);
         var batch = await context.IntakeBatches
             .FirstOrDefaultAsync(x => x.ShiftId == shift.Id && x.ReceivingTeamId == team.Id
                 && x.IsActive != false);
@@ -723,12 +773,15 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
             };
             context.IntakeBatches.Add(batch);
         }
+
         var planned = 0;
         var order = await context.PickupAssignments
             .Where(x => x.IntakeBatchId == batch.Id && x.IsActive != false)
             .Select(x => (int?)x.RouteOrder).MaxAsync() ?? 0;
         foreach (var request in candidates.OrderBy(x => ExtractArea(x.PickupAddress)).ThenBy(x => x.PickupAddress))
         {
+            if (!CanTakeRequest(team, usedOrders, usedKg, request.EstimateWeight))
+                continue;
             var area = ExtractArea(request.PickupAddress);
             context.PickupAssignments.Add(new PickupAssignment
             {
@@ -740,6 +793,8 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
             request.UpdateAt = DateTime.UtcNow;
             NotificationWriter.NotifyDonor(context, request, "ReceivingStaffAssigned", "Đã phân công nhân viên tiếp nhận",
                 $"được phân công vào team {team.TeamName}, ca {shift.ShiftName} ngày {shift.ShiftDate:dd/MM/yyyy}.");
+            usedOrders++;
+            usedKg += request.EstimateWeight;
             planned++;
         }
         await context.SaveChangesAsync();
@@ -869,15 +924,32 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
             List<OperationalTeam> targetTeams, bool warehouseDropOff)
         {
             if (sourceRequests.Count == 0) return;
-            var baseSize = sourceRequests.Count / targetTeams.Count;
-            var remainder = sourceRequests.Count % targetTeams.Count;
-            var offset = 0;
-            for (var teamIndex = 0; teamIndex < targetTeams.Count; teamIndex++)
+            // Weight- and quota-aware split (feedback 11/09): each round picks the least
+            // loaded team that can still take the next request within its vehicle quota.
+            var load = targetTeams.ToDictionary(x => x.Id, _ => 0);
+            var weight = targetTeams.ToDictionary(x => x.Id, _ => 0m);
+            var assigned = targetTeams.ToDictionary(x => x.Id, _ => new List<DonationRequest>());
+            var unassigned = new List<DonationRequest>();
+            foreach (var request in sourceRequests)
             {
-                var team = targetTeams[teamIndex];
-                var quota = baseSize + (teamIndex < remainder ? 1 : 0);
-                var teamRequests = sourceRequests.Skip(offset).Take(quota).ToList();
-                offset += quota;
+                var best = targetTeams
+                    .Where(team => CanTakeRequest(team, load[team.Id], weight[team.Id], request.EstimateWeight))
+                    .OrderBy(team => load[team.Id]).ThenBy(team => weight[team.Id])
+                    .ThenBy(team => targetTeams.IndexOf(team))
+                    .FirstOrDefault();
+                if (best is null)
+                {
+                    unassigned.Add(request);
+                    continue;
+                }
+                load[best.Id]++;
+                weight[best.Id] += request.EstimateWeight;
+                assigned[best.Id].Add(request);
+            }
+            foreach (var team in targetTeams)
+            {
+                var teamRequests = assigned[team.Id];
+                if (teamRequests.Count == 0) continue;
                 var existingCount = counts[team.Id];
                 counts[team.Id] += teamRequests.Count;
                 var batch = batchByTeam[team.Id];
@@ -1117,6 +1189,10 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
             throw new InvalidOperationException("A warehouse drop-off request can only be assigned to a warehouse receiving team.");
         if (request.DeliveryMethod == "StaffPickup" && warehouseTeam)
             throw new InvalidOperationException("A staff-pickup request can only be assigned to a pickup team.");
+        var (teamUsedOrders, teamUsedKg) = await GetTeamQuotaUsageAsync(team.Id);
+        if (!CanTakeRequest(team, teamUsedOrders, teamUsedKg, request.EstimateWeight))
+            throw new InvalidOperationException(
+                $"Team này đã đạt giới hạn nhận trong ca{DescribeQuota(team)}. Vui lòng chọn team khác.");
 
         var batch = await context.IntakeBatches.FirstOrDefaultAsync(x => x.ShiftId == team.ShiftId
             && x.ReceivingTeamId == team.Id && x.IsActive != false);
@@ -1182,6 +1258,40 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
                 x.ReceivingTeam != null && x.ReceivingTeam.Members.Any(member =>
                     member.StaffId == staffId && member.IsActive != false)))
             .ToListAsync();
+    }
+
+    public async Task<List<ReceivingStagingGroupDto>> GetMyWarehouseLayoutAsync(Guid staffId)
+    {
+        var warehouseId = await context.Users.AsNoTracking()
+            .Where(x => x.Id == staffId && x.IsActive != false)
+            .Select(x => x.WarehouseId)
+            .FirstOrDefaultAsync();
+        if (!warehouseId.HasValue) throw new InvalidOperationException("Staff is not assigned to a warehouse.");
+
+        var warehouse = await context.Warehouses.AsNoTracking()
+            .Include(x => x.Areas.Where(a => a.IsActive != false && a.AreaType == "Receiving"))
+                .ThenInclude(a => a.Groups.Where(g => g.IsActive != false))
+                    .ThenInclude(g => g.StorageLocations.Where(l => l.IsActive != false))
+            .FirstOrDefaultAsync(x => x.Id == warehouseId.Value && x.IsActive != false)
+            ?? throw new InvalidOperationException("Assigned warehouse not found.");
+
+        var locationBatchCounts = await GetLocationBatchCountsAsync([warehouse.Id]);
+
+        return warehouse.Areas
+            .OrderBy(a => a.AreaName)
+            .SelectMany(a => a.Groups
+                .Select(g => new ReceivingStagingGroupDto(g.Id, g.GroupName, a.AreaName,
+                    g.CapacityKg, g.CurrentKg, Math.Max(0, g.CapacityKg - g.CurrentKg),
+                    g.StorageLocations.OrderBy(location => location.LocationCode)
+                        .Select(location => new ReceivingStagingLocationDto(
+                            location.Id, location.LocationCode, location.AisleCode,
+                            location.RackCode, location.ShelfCode, location.BinCode,
+                            location.CapacityKg, location.CurrentWeightKg,
+                            Math.Max(0, location.CapacityKg - location.CurrentWeightKg),
+                            location.Status,
+                            locationBatchCounts.GetValueOrDefault(location.Id))).ToList())))
+            .OrderBy(x => x.GroupName)
+            .ToList();
     }
 
     public async Task<ReceivingBatchDto?> GetMyBatchAsync(Guid staffId, Guid batchId)
@@ -1267,7 +1377,6 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
 
     public async Task ConfirmPickupAsync(Guid staffId, Guid batchId, Guid requestId, ConfirmPickupDto dto)
     {
-        if (dto.ActualWeight <= 0) throw new InvalidOperationException("Actual weight must be greater than zero.");
         var batch = await RequireMyBatch(staffId, batchId);
         if (batch.Status != "Receiving" || batch.ReceivingTeam?.Status != "InProgress"
             || batch.ReceivingTeam.Shift.Status != "InProgress")
@@ -1279,26 +1388,64 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
         var alreadyInBatch = await context.IntakeBatchDonationRequests.AnyAsync(x =>
             x.IntakeBatchId == batch.Id && x.DonationRequestId == requestId);
         if (alreadyInBatch) throw new InvalidOperationException("Donation request is already included in this intake batch.");
+
+        // No re-weighing at pickup: the donor estimate is the official weight. A staff-entered
+        // value is only honored when the estimate itself is unusable (<= 0).
+        var effectiveWeight = assignment.DonorRequest.EstimateWeight > 0
+            ? assignment.DonorRequest.EstimateWeight
+            : dto.ActualWeight ?? 0;
+        if (effectiveWeight <= 0)
+            throw new InvalidOperationException("This request has no usable weight estimate.");
+        await EnsureBatchCapacityAsync(batch, effectiveWeight, assignment.DonorRequest.EstimatedItemCount,
+            assignment.DonorRequest.EstimatedVolumeLiters);
+
         context.IntakeBatchDonationRequests.Add(new IntakeBatchDonationRequest
         {
             Id = Guid.NewGuid(), IntakeBatchId = batch.Id, DonationRequestId = requestId,
             AddedAt = DateTime.UtcNow, AddedByStaffId = staffId, CreateAt = DateTime.UtcNow
         });
-        assignment.DonorRequest.ActualWeight = dto.ActualWeight;
+        assignment.DonorRequest.ActualWeight = effectiveWeight;
         assignment.DonorRequest.ImageUrls = dto.ImageUrls ?? assignment.DonorRequest.ImageUrls;
         assignment.DonorRequest.Status = DonationRequestStatus.Confirmed; assignment.DonorRequest.UpdateAt = DateTime.UtcNow;
-        batch.TotalWeight += dto.ActualWeight; batch.UpdateAt = DateTime.UtcNow;
+        batch.TotalWeight += effectiveWeight; batch.UpdateAt = DateTime.UtcNow;
         var awardedPoints = await DonationPointWriter.AwardDonationAsync(
-            context, assignment.DonorRequest, dto.ActualWeight, staffId);
+            context, assignment.DonorRequest, effectiveWeight, staffId);
         var actor = await NotificationWriter.ActorNameAsync(context, staffId);
         NotificationWriter.NotifyDonor(context, assignment.DonorRequest, "DonationReceived", "Đã tiếp nhận đồ quyên góp",
-            $"được {actor} tiếp nhận lúc {NotificationWriter.FormatTime(DateTime.UtcNow)}, khối lượng {dto.ActualWeight:0.##} kg.", staffId);
+            $"được {actor} tiếp nhận lúc {NotificationWriter.FormatTime(DateTime.UtcNow)}, khối lượng {effectiveWeight:0.##} kg.", staffId);
         if (awardedPoints > 0)
             NotificationWriter.NotifyDonor(context, assignment.DonorRequest, "DonationPointsAwarded",
                 $"Bạn nhận được {awardedPoints} điểm xanh",
-                $"Đơn {assignment.DonorRequest.RequestCode} được cộng {awardedPoints} điểm từ {dto.ActualWeight:0.##} kg thực nhận.", staffId);
+                $"Đơn {assignment.DonorRequest.RequestCode} được cộng {awardedPoints} điểm từ {effectiveWeight:0.##} kg.", staffId);
         CompleteBatchWhenAllRequestsProcessed(batch);
         await context.SaveChangesAsync();
+    }
+
+    private async Task EnsureBatchCapacityAsync(IntakeBatch batch, decimal addedWeightKg,
+        int addedItemCount, decimal addedVolumeLiters)
+    {
+        var warehouse = batch.Warehouse ?? await context.Warehouses.AsNoTracking()
+            .FirstAsync(x => x.Id == batch.WarehouseId);
+        var batchRequests = await context.IntakeBatchDonationRequests.AsNoTracking()
+            .Where(x => x.IntakeBatchId == batch.Id && x.IsActive != false)
+            .Join(context.DonationRequests,
+                link => link.DonationRequestId, request => request.Id,
+                (link, request) => request)
+            .Where(request => request.IsActive != false)
+            .Select(request => new { request.EstimatedItemCount, request.EstimatedVolumeLiters })
+            .ToListAsync();
+        var currentWeight = batch.TotalWeight;
+        var currentItems = batchRequests.Sum(x => x.EstimatedItemCount);
+        var currentVolume = batchRequests.Sum(x => x.EstimatedVolumeLiters);
+        if (currentWeight + addedWeightKg > warehouse.MaxBatchWeightKg)
+            throw new InvalidOperationException(
+                $"Lô đã đạt giới hạn khối lượng của kho ({warehouse.MaxBatchWeightKg:0.#} kg). Vui lòng tạo lô mới.");
+        if (currentItems + addedItemCount > warehouse.MaxBatchItemCount)
+            throw new InvalidOperationException(
+                $"Lô đã đạt giới hạn số món của kho ({warehouse.MaxBatchItemCount}). Vui lòng tạo lô mới.");
+        if (currentVolume + addedVolumeLiters > warehouse.MaxBatchVolumeLiters)
+            throw new InvalidOperationException(
+                $"Lô đã đạt giới hạn thể tích của kho ({warehouse.MaxBatchVolumeLiters:0.#} lít). Vui lòng tạo lô mới.");
     }
 
     public async Task<WarehouseDropOffBoardDto> GetMyWarehouseDropOffsAsync(Guid staffId)
@@ -1315,14 +1462,21 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
             .OrderBy(team => team.Shift.ShiftDate).ThenBy(team => team.Shift.StartTime)
             .ToListAsync();
 
-        var contexts = dutyContexts.Select(team => new WarehouseDutyContextDto(
-            team.Id, team.TeamName, team.ShiftId, team.Shift.ShiftName, team.Shift.ShiftDate,
-            team.Shift.StartTime, team.Shift.EndTime, team.Shift.Status, team.Status,
-            team.Shift.WarehouseId, team.Shift.Warehouse.WarehouseName, team.Shift.Warehouse.Address,
-            team.IntakeBatches.FirstOrDefault()?.Id,
-            team.Members.Where(member => member.IsActive != false)
-                .Select(member => new ReceivingTeamMemberDto(
-                    member.StaffId, member.Staff.FullName, member.Staff.PhoneNumber)).ToList())).ToList();
+        var contexts = new List<WarehouseDutyContextDto>();
+        foreach (var team in dutyContexts)
+        {
+            var (usedOrders, usedKg) = await GetTeamQuotaUsageAsync(team.Id);
+            contexts.Add(new WarehouseDutyContextDto(
+                team.Id, team.TeamName, team.ShiftId, team.Shift.ShiftName, team.Shift.ShiftDate,
+                team.Shift.StartTime, team.Shift.EndTime, team.Shift.Status, team.Status,
+                team.Shift.WarehouseId, team.Shift.Warehouse.WarehouseName, team.Shift.Warehouse.Address,
+                team.IntakeBatches.FirstOrDefault()?.Id,
+                team.VehicleType, team.MaxOrdersPerShift, usedOrders,
+                team.MaxKgPerShift, usedKg,
+                team.Members.Where(member => member.IsActive != false)
+                    .Select(member => new ReceivingTeamMemberDto(
+                        member.StaffId, member.Staff.FullName, member.Staff.PhoneNumber)).ToList()));
+        }
         if (contexts.Count == 0) return new WarehouseDropOffBoardDto([], []);
 
         var warehouseIds = contexts.Select(x => x.WarehouseId).Distinct().ToList();
@@ -1351,8 +1505,6 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
 
     public async Task ConfirmWarehouseDropOffAsync(Guid staffId, Guid requestId, ConfirmPickupDto dto)
     {
-        if (dto.ActualWeight <= 0)
-            throw new InvalidOperationException("Actual weight must be greater than zero.");
         var request = await context.DonationRequests
             .FirstOrDefaultAsync(x => x.Id == requestId && x.IsActive != false
                 && x.DeliveryMethod == "DonorDropOff")
@@ -1436,22 +1588,28 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
                 AddedAt = DateTime.UtcNow, AddedByStaffId = staffId,
                 CreateAt = DateTime.UtcNow, IsActive = true
             });
-        request.ActualWeight = dto.ActualWeight;
+        // No re-weighing at drop-off: donor estimate is the official weight.
+        var effectiveWeight = request.EstimateWeight > 0 ? request.EstimateWeight : dto.ActualWeight ?? 0;
+        if (effectiveWeight <= 0)
+            throw new InvalidOperationException("This request has no usable weight estimate.");
+        await EnsureBatchCapacityAsync(batch, effectiveWeight, request.EstimatedItemCount,
+            request.EstimatedVolumeLiters);
+        request.ActualWeight = effectiveWeight;
         request.ImageUrls = dto.ImageUrls ?? request.ImageUrls;
         request.Status = DonationRequestStatus.Confirmed;
         request.UpdateAt = DateTime.UtcNow;
-        batch.TotalWeight += dto.ActualWeight;
+        batch.TotalWeight += effectiveWeight;
         batch.UpdateAt = DateTime.UtcNow;
-        var awardedPoints = await DonationPointWriter.AwardDonationAsync(context, request, dto.ActualWeight, staffId);
+        var awardedPoints = await DonationPointWriter.AwardDonationAsync(context, request, effectiveWeight, staffId);
         await context.Entry(batch).Collection(x => x.PickupAssignments).LoadAsync();
         CompleteBatchWhenAllRequestsProcessed(batch);
         var actor = await NotificationWriter.ActorNameAsync(context, staffId);
         NotificationWriter.NotifyDonor(context, request, "DonationReceived", "Đã tiếp nhận tại kho",
-            $"được {actor} tiếp nhận lúc {NotificationWriter.FormatTime(DateTime.UtcNow)}, khối lượng {dto.ActualWeight:0.##} kg.", staffId);
+            $"được {actor} tiếp nhận lúc {NotificationWriter.FormatTime(DateTime.UtcNow)}, khối lượng {effectiveWeight:0.##} kg.", staffId);
         if (awardedPoints > 0)
             NotificationWriter.NotifyDonor(context, request, "DonationPointsAwarded",
                 $"Bạn nhận được {awardedPoints} điểm xanh",
-                $"Đơn {request.RequestCode} được cộng {awardedPoints} điểm từ {dto.ActualWeight:0.##} kg thực nhận.", staffId);
+                $"Đơn {request.RequestCode} được cộng {awardedPoints} điểm từ {effectiveWeight:0.##} kg.", staffId);
         await context.SaveChangesAsync();
     }
 
@@ -1705,6 +1863,12 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
         WarehouseName = batch.Warehouse?.WarehouseName ?? string.Empty,
         WarehouseAddress = batch.Warehouse?.Address ?? string.Empty,
         TotalWeight = batch.TotalWeight,
+        VehicleType = batch.ReceivingTeam?.VehicleType,
+        MaxOrdersPerShift = batch.ReceivingTeam?.MaxOrdersPerShift,
+        UsedOrders = batch.PickupAssignments.Count(x => x.IsActive != false && x.Status == "Pending"),
+        MaxKgPerShift = batch.ReceivingTeam?.MaxKgPerShift,
+        UsedKg = batch.PickupAssignments.Where(x => x.IsActive != false && x.Status == "Pending")
+            .Sum(x => (decimal?)x.DonorRequest.EstimateWeight) ?? 0m,
         WarehouseReceivedAt = batch.WarehouseReceivedAt,
         WarehouseReceivedBy = batch.WarehouseReceivedByStaff?.FullName,
         CurrentAreaName = batch.CurrentArea?.AreaName,
@@ -1725,8 +1889,6 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
                             location.Status,
                             locationBatchCounts.GetValueOrDefault(location.Id))).ToList())))
             .OrderBy(x => x.GroupName).ToList() ?? [],
-        TeamMembers = batch.ReceivingTeam?.Members.Where(x => x.IsActive != false)
-            .Select(x => new ReceivingTeamMemberDto(x.StaffId, x.Staff.FullName, x.Staff.PhoneNumber)).ToList() ?? [],
         Requests = batch.PickupAssignments.OrderBy(x => x.RouteOrder).Select(x => new ReceivingRequestDto
         {
             Id = x.DonorRequestId, BatchId = batch.Id,
@@ -1734,6 +1896,9 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
             DonorName = x.DonorRequest.ContactName, PhoneNumber = x.DonorRequest.ContactPhoneNumber,
             PickupAddress = x.DonorRequest.PickupAddress, Description = x.DonorRequest.Description ?? string.Empty,
             EstimateWeight = x.DonorRequest.EstimateWeight, ActualWeight = x.DonorRequest.ActualWeight,
+            RouteOrder = x.RouteOrder, AreaKey = x.AreaKey,
+            PickupLatitude = x.DonorRequest.PickupLatitude,
+            PickupLongitude = x.DonorRequest.PickupLongitude,
             PickupDate = x.DonorRequest.PickupDate, Status = x.Status, Notes = x.Notes,
             DeliveryMethod = x.DonorRequest.DeliveryMethod,
             ImageUrls = x.DonorRequest.ImageUrls

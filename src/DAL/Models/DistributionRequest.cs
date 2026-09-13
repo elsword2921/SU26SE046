@@ -16,6 +16,12 @@ namespace DAL.Models
         public DateTime? EstimatedDeliveryTime { get; set; }
         public string Status { get; set; } = string.Empty;
         public string? RequestNotes { get; set; }
+        public Guid? RequestedClothingTypeId { get; set; }
+        public Guid? RequestedGenderId { get; set; }
+        public Guid? RequestedSizeId { get; set; }
+        public Guid? RequestedTargetUserId { get; set; }
+        public decimal? RequestedWeightKg { get; set; }
+        public int? RequestedQuantity { get; set; }
         public string? RejectReason { get; set; }
         public DateTime RequestedAt { get; set; }
         public DateTime? ApprovedAt { get; set; }

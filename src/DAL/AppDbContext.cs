@@ -36,6 +36,7 @@ namespace DAL
         public DbSet<DonationPointTransaction> DonationPointTransactions => Set<DonationPointTransaction>();
         public DbSet<DonationPointRule> DonationPointRules => Set<DonationPointRule>();
         public DbSet<AiPromptConfiguration> AiPromptConfigurations => Set<AiPromptConfiguration>();
+        public DbSet<AiUsageLog> AiUsageLogs => Set<AiUsageLog>();
         public DbSet<Warehouse> Warehouses => Set<Warehouse>();
         public DbSet<WarehouseArea> WarehouseAreas => Set<WarehouseArea>();
         public DbSet<AreaGroup> AreaGroups => Set<AreaGroup>();
@@ -119,6 +120,8 @@ namespace DAL
 
             modelBuilder.Entity<User>().HasOne(u => u.Role).WithMany(r => r.Users).HasForeignKey(u => u.RoleId);
             modelBuilder.Entity<AiPromptConfiguration>().HasIndex(x => x.Feature).IsUnique();
+            modelBuilder.Entity<AiUsageLog>().HasIndex(x => new { x.Feature, x.UsageDate, x.UserId });
+            modelBuilder.Entity<AiUsageLog>().Property(x => x.Feature).HasMaxLength(100);
             modelBuilder.Entity<DonationPointTransaction>()
                 .HasIndex(x => new { x.DonationRequestId, x.Type }).IsUnique()
                 .HasFilter("[DonationRequestId] IS NOT NULL");
@@ -197,7 +200,7 @@ namespace DAL
                 {
                     Id = RoleSeedData.WarehouseStaffId,
                     RoleName = "WarehouseStaff",
-                    Description = "Staff responsible for warehouse operations",
+                    Description = "Chuyên viên xuất nhập kho",
                     CreateAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc)
                 }
             );

@@ -37,4 +37,5 @@ public interface IReceivingOperationsService
     Task CompleteBatchAsync(Guid staffId, Guid batchId);
     Task ReceiveBatchAtWarehouseAsync(Guid staffId, Guid batchId, ReceiveIntakeBatchAtWarehouseDto dto);
     Task SendToClassificationAsync(Guid staffId, Guid batchId);
+    Task<List<ReceivingStagingGroupDto>> GetMyWarehouseLayoutAsync(Guid staffId);
 }

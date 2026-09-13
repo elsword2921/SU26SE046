@@ -15,6 +15,9 @@ namespace DAL.Models
         public double? Latitude { get; set; }
         public double? Longitude { get; set; }
         public double ServiceRadiusKm { get; set; } = 24;
+        public decimal MaxBatchWeightKg { get; set; } = 200;
+        public int MaxBatchItemCount { get; set; } = 500;
+        public decimal MaxBatchVolumeLiters { get; set; } = 1500;
 
         // Navigation
         public virtual ICollection<User> Users { get; set; }

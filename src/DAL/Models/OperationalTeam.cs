@@ -7,6 +7,9 @@ public class OperationalTeam : BaseEntity
     public Guid ShiftId { get; set; }
     public string TeamType { get; set; } = string.Empty;
     public string TeamName { get; set; } = string.Empty;
+    public string? VehicleType { get; set; }
+    public int? MaxOrdersPerShift { get; set; }
+    public decimal? MaxKgPerShift { get; set; }
     public string Status { get; set; } = "Scheduled";
     public DateTime? StartedAt { get; set; }
     public Guid? StartedByStaffId { get; set; }
