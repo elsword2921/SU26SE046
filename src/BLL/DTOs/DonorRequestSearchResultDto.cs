@@ -21,6 +21,10 @@ namespace BLL.DTOs
 
         public decimal EstimateWeight { get; set; }
 
+        public int EstimatedItemCount { get; set; }
+
+        public decimal EstimatedVolumeLiters { get; set; }
+
         public decimal? ActualWeight { get; set; }
 
         public string PickupAddress { get; set; } = string.Empty;

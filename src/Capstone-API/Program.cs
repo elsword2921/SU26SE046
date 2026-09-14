@@ -42,7 +42,8 @@ builder.Logging.AddDebug();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(
-        builder.Configuration.GetConnectionString("DefaultConnection")));
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        sql => sql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)));
 builder.Services.AddHostedService<ShiftLifecycleWorker>();
 
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();

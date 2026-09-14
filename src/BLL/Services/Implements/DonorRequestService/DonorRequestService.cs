@@ -1,4 +1,4 @@
-﻿using BLL.DTOs;
+using BLL.DTOs;
 using BLL.Common;
 using BLL.Services.Interfaces.DonorRequestService;
 using BLL.Services.Implements.Notifications;
@@ -283,6 +283,8 @@ namespace BLL.Services.Implements.DonorRequestService
                     Description = x.Description,
                     ImageUrls = x.ImageUrls,
                     EstimateWeight = x.EstimateWeight,
+                    EstimatedItemCount = x.EstimatedItemCount,
+                    EstimatedVolumeLiters = x.EstimatedVolumeLiters,
                     ActualWeight = x.ActualWeight,
                     PickupAddress = x.PickupAddress,
                     PickupDate = x.PickupDate,

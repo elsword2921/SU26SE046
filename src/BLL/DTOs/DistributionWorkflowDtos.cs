@@ -38,5 +38,8 @@ public record DistributionRequestViewDto(Guid Id, string Code, Guid Organization
     string Status, string? Notes, string? RejectReason, DateTime RequestedAt, DateTime? ApprovedAt,
     string? IssueSlipCode, DateTime? WarehouseIssuedAt, string? IssuedBy, string? GhnOrderCode,
     string? GhnStatus, DateTime? GhnUpdatedAt, List<DistributionItemViewDto> Items,
-    List<ShipmentEventDto> ShipmentHistory);
+    List<ShipmentEventDto> ShipmentHistory,
+    Guid? RequestedClothingTypeId = null, Guid? RequestedGenderId = null,
+    Guid? RequestedSizeId = null, Guid? RequestedTargetUserId = null,
+    decimal? RequestedWeightKg = null, int? RequestedQuantity = null);
 public record ShipmentEventDto(string Status, string? Description, string Source, DateTime OccurredAt);
