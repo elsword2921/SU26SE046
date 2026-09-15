@@ -37,13 +37,7 @@ public partial class ClassificationOperationsService(AppDbContext context) : ICl
                 x.ClassificationTeam!.TeamName, x.ClassificationTeam.Status,
                 x.CurrentArea != null ? x.CurrentArea.AreaName : null,
                 x.ClassificationTeam.Shift.ShiftDate, x.ClassificationTeam.Shift.StartTime,
-                x.ClassificationTeam.Shift.EndTime)
-            {
-                IsRecycledReturn = x.ProcessingOperationOutputId != null,
-                SourceOperationCode = x.ProcessingOperationOutput!.ProcessingOperation.OperationCode,
-                SourceOrganizationName = x.ProcessingOperationOutput!.ProcessingOperation.Organization.FullName,
-                ImageUrls = x.BatchImages ?? new List<string>()
-            }).ToListAsync();
+                x.ClassificationTeam.Shift.EndTime)).ToListAsync();
 
     public async Task<ClassificationBatchDetailDto?> GetBatchAsync(Guid staffId, Guid batchId)
     {
@@ -51,7 +45,6 @@ public partial class ClassificationOperationsService(AppDbContext context) : ICl
             .Include(x => x.IntakeBatchDonationRequests)
             .Include(x => x.ClassifiedItems.Where(i => i.IsActive != false))
                 .ThenInclude(i => i.InspectionAnswers.Where(a => a.IsActive != false))
-            .Include(x => x.ProcessingOperationOutput!.ProcessingOperation.Organization)
             .FirstOrDefaultAsync(x => x.Id == batchId && x.IsActive != false
                 && x.ClassificationTeam != null && x.ClassificationTeam.Members.Any(m =>
                     m.StaffId == staffId && m.IsActive != false));
@@ -138,20 +131,9 @@ public partial class ClassificationOperationsService(AppDbContext context) : ICl
         await RequireActiveClassificationTeamAsync(staffId, batch);
         var handedOffWeight = decimal.Round(batch.TotalWeight, 2, MidpointRounding.AwayFromZero);
         var countedWeight = decimal.Round(dto.TotalWeightKg, 2, MidpointRounding.AwayFromZero);
-        var sourceRequests = await context.IntakeBatchDonationRequests.AsNoTracking()
-            .Where(x => x.IntakeBatchId == batchId && x.DonationRequest.IsActive != false)
-            .Join(context.DonationRequests,
-                link => link.DonationRequestId, request => request.Id,
-                (link, request) => new { request.EstimatedItemCount })
-            .ToListAsync();
-        var handedOffItems = sourceRequests.Sum(x => x.EstimatedItemCount);
-        // Deviations against the handover (items or kg) must be explained in the notes
-        // before classification starts (feedback 11/09).
-        var weightDeviation = countedWeight != handedOffWeight;
-        var itemDeviation = handedOffItems > 0 && dto.ItemCount != handedOffItems;
-        if ((weightDeviation || itemDeviation) && string.IsNullOrWhiteSpace(dto.Notes))
+        if (countedWeight != handedOffWeight)
             throw new InvalidOperationException(
-                "Số món/khối lượng thực nhận lệch với bàn giao. Vui lòng ghi rõ lý do chênh lệch trong ghi chú.");
+                $"Tổng khối lượng thực tế phải đúng bằng {handedOffWeight:0.##} kg do Receiving Staff bàn giao.");
         if (batch.Status is not ("AwaitingClassificationCount" or "ReadyForClassification"))
             throw new InvalidOperationException("Only a received batch that has not started classification can be counted.");
         if (await context.ClassifiedItems.AnyAsync(x => x.BatchId == batchId && x.IsActive != false))
@@ -341,10 +323,7 @@ public partial class ClassificationOperationsService(AppDbContext context) : ICl
             Grade(x.ConditionRating), x.ProcessingDirection, x.TotalItem, x.Status, x.TotalWeight,
             x.ClassificationAreaName, x.PlacedInClassificationAreaAt,
             x.StorageLocationId,
-            x.DonationRequestSources.Select(s => s.DonationRequest.RequestCode).Distinct().OrderBy(c => c).ToList())
-        {
-            IsRecycledReturn = x.ProcessingOperationOutputId != null
-        };
+            x.DonationRequestSources.Select(s => s.DonationRequest.RequestCode).Distinct().OrderBy(c => c).ToList());
         return new ClassificationAreaLayoutDto(warehouse.Id, warehouse.WarehouseName,
             areas.Select(area => new ClassificationAreaDto(area.Id, area.AreaName, area.Description,
                 area.CapacityKg, area.CurrentKg, area.Groups.OrderBy(g => g.GroupName).Select(group =>
@@ -1215,11 +1194,5 @@ public partial class ClassificationOperationsService(AppDbContext context) : ICl
         x.IntakeDate, x.TotalWeight, NormalizeStatus(x.Status), x.IntakeBatchDonationRequests.Count,
         x.CountedItemCount, x.CountedTotalWeight, x.CountingNotes, x.CountedAt,
         x.ClassificationAreaName, x.ClassifiedAreaPlacedAt,
-        x.ClassifiedItems.OrderBy(i => i.ClassifiedAt).Select(MapItem).ToList())
-    {
-        IsRecycledReturn = x.ProcessingOperationOutputId != null,
-        SourceOperationCode = x.ProcessingOperationOutput?.ProcessingOperation.OperationCode,
-        SourceOrganizationName = x.ProcessingOperationOutput?.ProcessingOperation.Organization.FullName,
-        BatchImages = x.BatchImages ?? []
-    };
+        x.ClassifiedItems.OrderBy(i => i.ClassifiedAt).Select(MapItem).ToList());
 }

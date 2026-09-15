@@ -26,10 +26,5 @@ namespace BLL.Services.Interfaces.DonorRequestService
             double? latitude,
             double? longitude,
             Guid? warehouseId);
-        Task<List<EligibleWarehouseDto>> GetEligibleWarehousesAsync(
-            double latitude,
-            double longitude,
-            DateTime? pickupDate,
-            decimal estimateWeight);
     }
 }

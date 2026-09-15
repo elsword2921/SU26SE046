@@ -10,13 +10,3 @@ public record DonorPickupWindowDto(
 public record DonorPickupAvailabilityDto(
     Guid WarehouseId,
     List<DonorPickupWindowDto> Windows);
-
-public record EligibleWarehouseDto(
-    Guid Id,
-    string Name,
-    string Address,
-    double DistanceKm,
-    decimal AvailableCapacityKg,
-    decimal MaxBatchWeightKg,
-    int MaxBatchItemCount,
-    decimal MaxBatchVolumeLiters);

@@ -4,7 +4,6 @@ using BLL.DTOs;
 using BLL.Services.Interfaces.ManagerAccounts;
 using DAL;
 using DAL.Models;
-using BLL.Services.Implements.Notifications;
 using Microsoft.EntityFrameworkCore;
 
 namespace BLL.Services.Implements.ManagerAccounts;
@@ -14,8 +13,6 @@ public partial class ManagerAccountService(AppDbContext context) : IManagerAccou
     private static readonly string[] AllowedRoles =
         ["Donor", "CharityOrganization", "RecyclingOrganization", "DisposalOrganization", "ReceivingStaff", "ClassificationStaff", "WarehouseStaff"];
     private static readonly string[] WarehouseRoles = ["ReceivingStaff", "ClassificationStaff", "WarehouseStaff"];
-    private static readonly string[] OrganizationRoles =
-        ["CharityOrganization", "RecyclingOrganization", "DisposalOrganization"];
 
     public async Task<ManagerAccountPageDto> SearchAsync(Guid? warehouseId, string? role, string? search, int page, int pageSize)
     {
@@ -108,53 +105,6 @@ public partial class ManagerAccountService(AppDbContext context) : IManagerAccou
         user.UpdateAt = DateTime.UtcNow;
         user.UpdatedBy = managerId;
         await context.SaveChangesAsync();
-    }
-
-    public async Task<IReadOnlyList<PendingOrganizationDto>> GetPendingOrganizationsAsync()
-    {
-        return await context.Users.AsNoTracking().Include(x => x.Role)
-            .Where(x => x.UserStatus == "PendingApproval" && OrganizationRoles.Contains(x.Role.RoleName))
-            .OrderBy(x => x.CreateAt)
-            .Select(x => new PendingOrganizationDto(x.Id, x.OrganizationName!, x.UserName, x.Email,
-                x.PhoneNumber, x.Role.RoleName, x.TaxCode, x.CertificateImageUrl, x.Address, x.CreateAt))
-            .ToListAsync();
-    }
-
-    public async Task ApproveOrganizationAsync(Guid managerId, Guid userId)
-    {
-        var user = await FindPendingOrganizationAsync(userId);
-        user.UserStatus = "Active";
-        user.EmailConfirmed = true;
-        user.IsActive = true;
-        user.UpdateAt = DateTime.UtcNow;
-        user.UpdatedBy = managerId;
-        NotificationWriter.NotifyUser(context, user.Id, "OrganizationApproved", "Tài khoản tổ chức đã được duyệt",
-            "Tài khoản tổ chức của bạn đã được duyệt. Bạn có thể đăng nhập ngay bây giờ.", null, managerId);
-        await context.SaveChangesAsync();
-    }
-
-    public async Task RejectOrganizationAsync(Guid managerId, Guid userId, RejectOrganizationDto dto)
-    {
-        var reason = (dto.Reason ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(reason))
-            throw new InvalidOperationException("A rejection reason is required.");
-        var user = await FindPendingOrganizationAsync(userId);
-        user.UserStatus = "Inactive";
-        user.IsActive = false;
-        user.UpdateAt = DateTime.UtcNow;
-        user.UpdatedBy = managerId;
-        NotificationWriter.NotifyUser(context, user.Id, "OrganizationRejected", "Đăng ký tổ chức bị từ chối",
-            $"Yêu cầu đăng ký tổ chức của bạn bị từ chối. Lý do: {reason}", null, managerId);
-        await context.SaveChangesAsync();
-    }
-
-    private async Task<User> FindPendingOrganizationAsync(Guid userId)
-    {
-        var user = await context.Users.Include(x => x.Role)
-            .FirstOrDefaultAsync(x => x.Id == userId && x.UserStatus == "PendingApproval")
-            ?? throw new InvalidOperationException("Pending organization account not found.");
-        EnsureManagedRole(user.Role.RoleName);
-        return user;
     }
 
     private async Task<Role> ValidateAsync(Guid? userId, string fullName, string userName, string email,

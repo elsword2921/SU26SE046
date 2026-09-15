@@ -9,9 +9,6 @@ namespace BLL.DTOs
         public List<string>? ImageUrls { get; set; }
 
         public decimal EstimateWeight { get; set; }
-        public int EstimatedItemCount { get; set; }
-
-        public decimal EstimatedVolumeLiters { get; set; }
 
         public string PickupAddress { get; set; }
 

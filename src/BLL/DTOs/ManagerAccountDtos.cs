@@ -33,8 +33,3 @@ public class UpdateManagerAccountDto
 }
 
 public record SetManagerAccountStatusDto(bool Locked);
-
-public record PendingOrganizationDto(Guid Id, string OrganizationName, string UserName, string Email,
-    string PhoneNumber, string Role, string? TaxCode, string? CertificateImageUrl,
-    string Address, DateTime? CreatedAt);
-public record RejectOrganizationDto(string Reason);

@@ -1,21 +1,13 @@
 namespace BLL.DTOs;
-public record CharityRequestCriteriaDto(IReadOnlyList<CategoryOptionDto> ClothingTypes,
-    IReadOnlyList<CategoryOptionDto> Genders, IReadOnlyList<CategoryOptionDto> Sizes,
-    IReadOnlyList<CategoryOptionDto> TargetUsers);
-public class CreateCharityDistributionRequestDto
-{
-    public Guid WarehouseId { get; set; }
-    public string RecipientName { get; set; } = string.Empty;
-    public string RecipientPhone { get; set; } = string.Empty;
-    public string ToAddress { get; set; } = string.Empty;
-    public string? Notes { get; set; }
-    public Guid? RequestedClothingTypeId { get; set; }
-    public Guid? RequestedGenderId { get; set; }
-    public Guid? RequestedSizeId { get; set; }
-    public Guid? RequestedTargetUserId { get; set; }
-    public decimal RequestedWeightKg { get; set; }
-    public int? RequestedQuantity { get; set; }
-}
+public record DistributionCatalogItemDto(Guid InventoryId, Guid ClassifiedBatchId, string BatchCode,
+    string Sku, string ClothingType, string FabricType, string Gender, string TargetUser, string Size,
+    string Grade, int AvailableQuantity, decimal AvailableWeight, bool IsLocked, string? LockReason,
+    List<DistributionCatalogImageDto> Items);
+public record DistributionCatalogImageDto(string ItemCode, string ClothingType, string FabricType,
+    string Gender, string TargetUser, string Size, List<string> ImageUrls, string? Notes);
+public record CreateDistributionItemDto(Guid InventoryId);
+public record CreateDistributionRequestDto(Guid WarehouseId, string RecipientName, string RecipientPhone,
+    string ToAddress, string? Notes, List<CreateDistributionItemDto> Items);
 public record CreateManagerRequestItemDto(Guid InventoryId, int Quantity);
 public record CreateManagerRequestDto(
     Guid OrganizationId,
@@ -38,8 +30,5 @@ public record DistributionRequestViewDto(Guid Id, string Code, Guid Organization
     string Status, string? Notes, string? RejectReason, DateTime RequestedAt, DateTime? ApprovedAt,
     string? IssueSlipCode, DateTime? WarehouseIssuedAt, string? IssuedBy, string? GhnOrderCode,
     string? GhnStatus, DateTime? GhnUpdatedAt, List<DistributionItemViewDto> Items,
-    List<ShipmentEventDto> ShipmentHistory,
-    Guid? RequestedClothingTypeId = null, Guid? RequestedGenderId = null,
-    Guid? RequestedSizeId = null, Guid? RequestedTargetUserId = null,
-    decimal? RequestedWeightKg = null, int? RequestedQuantity = null);
+    List<ShipmentEventDto> ShipmentHistory);
 public record ShipmentEventDto(string Status, string? Description, string Source, DateTime OccurredAt);

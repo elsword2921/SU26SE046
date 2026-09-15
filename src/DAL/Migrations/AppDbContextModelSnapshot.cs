@@ -34,9 +34,6 @@ namespace DAL.Migrations
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<int?>("DailyRequestLimit")
-                        .HasColumnType("int");
-
                     b.Property<DateTime?>("DeleteAt")
                         .HasColumnType("datetime2");
 
@@ -61,9 +58,6 @@ namespace DAL.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<int?>("TotalRequestLimit")
-                        .HasColumnType("int");
-
                     b.Property<DateTime?>("UpdateAt")
                         .HasColumnType("datetime2");
 
@@ -76,53 +70,6 @@ namespace DAL.Migrations
                         .IsUnique();
 
                     b.ToTable("AiPromptConfigurations");
-                });
-
-            modelBuilder.Entity("DAL.Models.AiUsageLog", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime?>("CreateAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid?>("CreatedBy")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime?>("DeleteAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid?>("DeletedBy")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("Feature")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<bool?>("IsActive")
-                        .HasColumnType("bit");
-
-                    b.Property<DateTime?>("UpdateAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid?>("UpdatedBy")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime>("UsageDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId");
-
-                    b.HasIndex("Feature", "UsageDate", "UserId");
-
-                    b.ToTable("AiUsageLogs");
                 });
 
             modelBuilder.Entity("DAL.Models.AreaGroup", b =>
@@ -968,25 +915,6 @@ namespace DAL.Migrations
                     b.Property<DateTime>("RequestedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<Guid?>("RequestedClothingTypeId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid?>("RequestedGenderId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<int?>("RequestedQuantity")
-                        .HasColumnType("int");
-
-                    b.Property<Guid?>("RequestedSizeId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid?>("RequestedTargetUserId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<decimal?>("RequestedWeightKg")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
                     b.Property<decimal>("ShippingFee")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
@@ -1247,13 +1175,6 @@ namespace DAL.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
-                    b.Property<int>("EstimatedItemCount")
-                        .HasColumnType("int");
-
-                    b.Property<decimal>("EstimatedVolumeLiters")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
                     b.PrimitiveCollection<string>("ImageUrls")
                         .HasColumnType("nvarchar(max)");
 
@@ -1266,12 +1187,6 @@ namespace DAL.Migrations
 
                     b.Property<DateTime?>("PickupDate")
                         .HasColumnType("datetime2");
-
-                    b.Property<double?>("PickupLatitude")
-                        .HasColumnType("float");
-
-                    b.Property<double?>("PickupLongitude")
-                        .HasColumnType("float");
 
                     b.Property<string>("RejectReason")
                         .HasColumnType("nvarchar(max)");
@@ -1887,13 +1802,6 @@ namespace DAL.Migrations
                     b.Property<bool?>("IsActive")
                         .HasColumnType("bit");
 
-                    b.Property<decimal?>("MaxKgPerShift")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<int?>("MaxOrdersPerShift")
-                        .HasColumnType("int");
-
                     b.Property<Guid>("ShiftId")
                         .HasColumnType("uniqueidentifier");
 
@@ -1920,9 +1828,6 @@ namespace DAL.Migrations
 
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("VehicleType")
-                        .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
 
@@ -2442,7 +2347,7 @@ namespace DAL.Migrations
                         {
                             Id = new Guid("77777777-7777-7777-7777-777777777777"),
                             CreateAt = new DateTime(2025, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Chuyên viên xuất nhập kho",
+                            Description = "Staff responsible for warehouse operations",
                             IsActive = true,
                             RoleName = "WarehouseStaff"
                         });
@@ -2907,9 +2812,6 @@ namespace DAL.Migrations
                     b.Property<string>("AvatarUrl")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("CertificateImageUrl")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<DateTime?>("CreateAt")
                         .HasColumnType("datetime2");
 
@@ -2939,9 +2841,6 @@ namespace DAL.Migrations
                     b.Property<bool?>("IsActive")
                         .HasColumnType("bit");
 
-                    b.Property<string>("OrganizationName")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<string>("PasswordHash")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -2952,9 +2851,6 @@ namespace DAL.Migrations
 
                     b.Property<Guid>("RoleId")
                         .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("TaxCode")
-                        .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime?>("UpdateAt")
                         .HasColumnType("datetime2");
@@ -3291,17 +3187,6 @@ namespace DAL.Migrations
                     b.Property<double?>("Longitude")
                         .HasColumnType("float");
 
-                    b.Property<int>("MaxBatchItemCount")
-                        .HasColumnType("int");
-
-                    b.Property<decimal>("MaxBatchVolumeLiters")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("MaxBatchWeightKg")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
                     b.Property<string>("PhoneNumber")
                         .HasColumnType("nvarchar(max)");
 
@@ -3453,17 +3338,6 @@ namespace DAL.Migrations
                         .IsUnique();
 
                     b.ToTable("WorkScheduleTemplates");
-                });
-
-            modelBuilder.Entity("DAL.Models.AiUsageLog", b =>
-                {
-                    b.HasOne("DAL.Models.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("DAL.Models.AreaGroup", b =>

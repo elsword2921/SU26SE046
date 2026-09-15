@@ -24,22 +24,19 @@ public record DeleteYearShiftsResultDto(int DeletedShifts, int SkippedOperationa
 public record UpdateManagerShiftDto(Guid WarehouseId, string ShiftName, DateTime ShiftDate,
     TimeSpan StartTime, TimeSpan EndTime);
 public record CreateReceivingTeamDto(Guid ShiftId, string TeamName, List<Guid> StaffIds,
-    string TeamType = "ReceivingPickup", string? VehicleType = null,
-    int? MaxOrdersPerShift = null, decimal? MaxKgPerShift = null);
+    string TeamType = "ReceivingPickup");
 public record UpdateReceivingTeamDto(string TeamName, List<Guid> StaffIds);
 public record PlanReceivingShiftDto(Guid ShiftId, Guid TeamId);
 public record AutoBalanceShiftDto(Guid ShiftId);
 public record AutoBalanceResultDto(int TeamCount, int RequestCount,
     Dictionary<Guid, int> RequestsPerTeam);
 public record AssignDonationRequestDto(Guid RequestId, Guid TeamId);
-public record ConfirmPickupDto(decimal? ActualWeight = null, string? Notes = null, List<string>? ImageUrls = null);
+public record ConfirmPickupDto(decimal ActualWeight, string? Notes, List<string>? ImageUrls);
 public record ReschedulePickupDto(DateTime PickupDate, string? Reason);
 public record RejectPickupDto(string Reason);
 public record WarehouseDutyContextDto(Guid TeamId, string TeamName, Guid ShiftId, string ShiftName,
     DateTime ShiftDate, TimeSpan StartTime, TimeSpan EndTime, string ShiftStatus, string TeamStatus,
     Guid WarehouseId, string WarehouseName, string WarehouseAddress, Guid? IntakeBatchId,
-    string? VehicleType, int? MaxOrdersPerShift, int UsedOrders,
-    decimal? MaxKgPerShift, decimal UsedKg,
     List<ReceivingTeamMemberDto> Members);
 public record WarehouseDropOffItemDto(Guid Id, Guid WarehouseId, string Code, string ContactName, string PhoneNumber,
     string Address, DateTime ExpectedDate, string Description, decimal EstimateWeight,
@@ -73,11 +70,6 @@ public class ReceivingBatchDto
     public string WarehouseName { get; set; } = string.Empty;
     public string WarehouseAddress { get; set; } = string.Empty;
     public decimal TotalWeight { get; set; }
-    public string? VehicleType { get; set; }
-    public int? MaxOrdersPerShift { get; set; }
-    public int UsedOrders { get; set; }
-    public decimal? MaxKgPerShift { get; set; }
-    public decimal UsedKg { get; set; }
     public DateTime? WarehouseReceivedAt { get; set; }
     public string? WarehouseReceivedBy { get; set; }
     public string? CurrentAreaName { get; set; }
@@ -99,10 +91,6 @@ public class ReceivingRequestDto
     public string Description { get; set; } = string.Empty;
     public decimal EstimateWeight { get; set; }
     public decimal? ActualWeight { get; set; }
-    public int RouteOrder { get; set; }
-    public string? AreaKey { get; set; }
-    public double? PickupLatitude { get; set; }
-    public double? PickupLongitude { get; set; }
     public DateTime? PickupDate { get; set; }
     public string Status { get; set; } = string.Empty;
     public string? Notes { get; set; }

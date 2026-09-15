@@ -14,9 +14,6 @@ namespace DAL.Models
         public string UserName { get; set; } = string.Empty;
         public string Address { get; set; } = string.Empty;
         public string UserStatus { get; set; } = string.Empty;
-        public string? OrganizationName { get; set; }
-        public string? TaxCode { get; set; }
-        public string? CertificateImageUrl { get; set; }
         public bool EmailConfirmed { get; set; }
         public int DonationPoint { get; set; } = 0;
         // Navigation

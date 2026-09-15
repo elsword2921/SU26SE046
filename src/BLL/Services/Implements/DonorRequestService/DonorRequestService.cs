@@ -1,4 +1,4 @@
-using BLL.DTOs;
+﻿using BLL.DTOs;
 using BLL.Common;
 using BLL.Services.Interfaces.DonorRequestService;
 using BLL.Services.Implements.Notifications;
@@ -60,7 +60,6 @@ namespace BLL.Services.Implements.DonorRequestService
                 throw new InvalidOperationException("Vui lòng chọn cách gửi quần áo đến kho.");
             if (dto.PickupDate.HasValue && dto.PickupDate.Value <= VietnamTime.Now)
                 throw new InvalidOperationException("Khung giờ tiếp nhận phải nằm trong tương lai.");
-            ValidateEstimate(dto.EstimateWeight, dto.EstimatedItemCount, dto.EstimatedVolumeLiters);
             var warehouse = deliveryMethod == "DonorDropOff"
                 ? await _context.Warehouses.FirstOrDefaultAsync(x =>
                     x.Id == dto.WarehouseId && x.IsActive != false)
@@ -69,7 +68,6 @@ namespace BLL.Services.Implements.DonorRequestService
                     dto.PickupLongitude!.Value);
             if (warehouse is null)
                 throw new InvalidOperationException("Kho tiếp nhận không tồn tại hoặc đã ngừng hoạt động.");
-            EnsureWithinBatchLimit(warehouse, dto.EstimateWeight, dto.EstimatedItemCount, dto.EstimatedVolumeLiters);
             if (dto.PickupDate.HasValue)
                 await ValidatePickupWindowAsync(warehouse.Id, dto.PickupDate.Value);
 
@@ -96,10 +94,6 @@ namespace BLL.Services.Implements.DonorRequestService
                     Description = dto.Description,
                     ImageUrls = dto.ImageUrls,
                     EstimateWeight = dto.EstimateWeight,
-                    EstimatedItemCount = dto.EstimatedItemCount,
-                    EstimatedVolumeLiters = dto.EstimatedVolumeLiters,
-                    PickupLatitude = dto.PickupLatitude,
-                    PickupLongitude = dto.PickupLongitude,
                     PickupAddress = deliveryMethod == "DonorDropOff"
                         ? warehouse.Address
                         : dto.PickupAddress!.Trim(),
@@ -141,14 +135,18 @@ namespace BLL.Services.Implements.DonorRequestService
             {
                 throw new Exception("Donation request not found");
             }
+
+            if (!CanDonorModify(request.Status))
+            {
+                throw new Exception("Donation request cannot be updated at this status");
+            }
+
             var warehouse = dto.PickupLatitude.HasValue && dto.PickupLongitude.HasValue
                 ? await ResolveNearestWarehouseAsync(
                     dto.PickupLatitude.Value,
                     dto.PickupLongitude.Value)
                 : await _context.Warehouses.FirstAsync(x => x.Id == request.WarehouseId);
 
-            ValidateEstimate(dto.EstimateWeight, dto.EstimatedItemCount, dto.EstimatedVolumeLiters);
-            EnsureWithinBatchLimit(warehouse, dto.EstimateWeight, dto.EstimatedItemCount, dto.EstimatedVolumeLiters);
             if (dto.PickupDate.Date < VietnamTime.Today)
                 throw new InvalidOperationException("Ngày tiếp nhận không được nằm trong quá khứ.");
             await ValidatePickupWindowAsync(warehouse.Id, dto.PickupDate);
@@ -157,11 +155,7 @@ namespace BLL.Services.Implements.DonorRequestService
             request.Description = dto.Description;
             request.ImageUrls = dto.ImageUrls;
             request.EstimateWeight = dto.EstimateWeight;
-            request.EstimatedItemCount = dto.EstimatedItemCount;
-            request.EstimatedVolumeLiters = dto.EstimatedVolumeLiters;
             request.PickupAddress = dto.PickupAddress;
-            request.PickupLatitude = dto.PickupLatitude;
-            request.PickupLongitude = dto.PickupLongitude;
             request.UpdateAt = VietnamTime.Now;
 
             await _unitOfWork
@@ -170,31 +164,6 @@ namespace BLL.Services.Implements.DonorRequestService
 
             await _unitOfWork.SaveChangeAsync();
         }
-
-        private static void ValidateEstimate(decimal weightKg, int itemCount, decimal volumeLiters)
-        {
-            if (weightKg is < 0.5m or > 500m)
-                throw new InvalidOperationException("Khối lượng ước tính phải từ 0.5 đến 500 kg.");
-            if (itemCount is < 1 or > 2000)
-                throw new InvalidOperationException("Số lượng món ước tính phải từ 1 đến 2000.");
-            if (volumeLiters is < 0.1m or > 10000m)
-                throw new InvalidOperationException("Thể tích ước tính phải từ 0.1 đến 10000 lít.");
-        }
-
-        private static void EnsureWithinBatchLimit(
-            DAL.Models.Warehouse warehouse, decimal weightKg, int itemCount, decimal volumeLiters)
-        {
-            if (weightKg > warehouse.MaxBatchWeightKg)
-                throw new InvalidOperationException(
-                    $"Lô vượt giới hạn khối lượng của kho ({warehouse.MaxBatchWeightKg:0.#} kg).");
-            if (itemCount > warehouse.MaxBatchItemCount)
-                throw new InvalidOperationException(
-                    $"Lô vượt giới hạn số món của kho ({warehouse.MaxBatchItemCount}).");
-            if (volumeLiters > warehouse.MaxBatchVolumeLiters)
-                throw new InvalidOperationException(
-                    $"Lô vượt giới hạn thể tích của kho ({warehouse.MaxBatchVolumeLiters:0.#} lít).");
-        }
-
 
         public async Task CancelAsync(Guid donorId, Guid requestId)
         {
@@ -283,8 +252,6 @@ namespace BLL.Services.Implements.DonorRequestService
                     Description = x.Description,
                     ImageUrls = x.ImageUrls,
                     EstimateWeight = x.EstimateWeight,
-                    EstimatedItemCount = x.EstimatedItemCount,
-                    EstimatedVolumeLiters = x.EstimatedVolumeLiters,
                     ActualWeight = x.ActualWeight,
                     PickupAddress = x.PickupAddress,
                     PickupDate = x.PickupDate,
@@ -387,76 +354,6 @@ namespace BLL.Services.Implements.DonorRequestService
                 .ToList();
         }
 
-        public async Task<List<EligibleWarehouseDto>> GetEligibleWarehousesAsync(
-            double latitude,
-            double longitude,
-            DateTime? pickupDate,
-            decimal estimateWeight)
-        {
-            if (latitude is < -90 or > 90 || longitude is < -180 or > 180)
-                throw new InvalidOperationException("Tọa độ địa chỉ không hợp lệ.");
-            if (estimateWeight < 0)
-                estimateWeight = 0;
-            var warehouses = await _context.Warehouses.AsNoTracking()
-                .Where(x => x.IsActive != false)
-                .ToListAsync();
-
-            // Warehouses geocoded on demand so distance checks work for fresh environments.
-            var coordinatesUpdated = false;
-            foreach (var warehouse in warehouses.Where(x => !x.Latitude.HasValue || !x.Longitude.HasValue))
-            {
-                var coordinate = await GeocodeAsync(warehouse.Address);
-                if (coordinate is null) continue;
-                warehouse.Latitude = coordinate.Value.Latitude;
-                warehouse.Longitude = coordinate.Value.Longitude;
-                warehouse.UpdateAt = VietnamTime.Now;
-                coordinatesUpdated = true;
-            }
-            if (coordinatesUpdated)
-                await _context.SaveChangesAsync();
-
-            var located = warehouses.Where(x => x.Latitude.HasValue && x.Longitude.HasValue)
-                .Select(x => new
-                {
-                    Warehouse = x,
-                    Distance = DistanceKm(latitude, longitude, x.Latitude!.Value, x.Longitude!.Value)
-                })
-                .Where(x => x.Distance <= x.Warehouse.ServiceRadiusKm)
-                .ToList();
-
-            if (located.Count == 0) return [];
-
-            var warehouseIds = located.Select(x => x.Warehouse.Id).ToList();
-            var shifts = await _context.Shifts.AsNoTracking()
-                .Where(x => x.IsActive != false
-                    && (x.Status == "Scheduled" || x.Status == "InProgress")
-                    && warehouseIds.Contains(x.WarehouseId)
-                    && (!pickupDate.HasValue || x.ShiftDate.Date == pickupDate.Value.Date))
-                .Select(x => new { x.WarehouseId, x.ShiftDate, x.EndTime })
-                .ToListAsync();
-            var now = VietnamTime.Now;
-            var warehouseIdsWithShifts = shifts
-                .Where(x => x.ShiftDate.Date.Add(x.EndTime) > now)
-                .Select(x => x.WarehouseId)
-                .Distinct()
-                .ToHashSet();
-
-            return located
-                .Where(x => warehouseIdsWithShifts.Contains(x.Warehouse.Id))
-                .Where(x => x.Warehouse.TotalCapacityKg - x.Warehouse.CurrentWeight >= estimateWeight)
-                .OrderBy(x => x.Distance)
-                .Select(x => new EligibleWarehouseDto(
-                    x.Warehouse.Id,
-                    x.Warehouse.WarehouseName,
-                    x.Warehouse.Address,
-                    Math.Round(x.Distance, 2),
-                    x.Warehouse.TotalCapacityKg - x.Warehouse.CurrentWeight,
-                    x.Warehouse.MaxBatchWeightKg,
-                    x.Warehouse.MaxBatchItemCount,
-                    x.Warehouse.MaxBatchVolumeLiters))
-                .ToList();
-        }
-
         private async Task ValidatePickupWindowAsync(Guid warehouseId, DateTime pickupDateTime)
         {
             var pickupTime = pickupDateTime.TimeOfDay;
@@ -483,6 +380,7 @@ namespace BLL.Services.Implements.DonorRequestService
                 .Where(x => x.IsActive != false)
                 .ToListAsync();
 
+            if (serviceDate.HasValue)
             {
                 var now = VietnamTime.Now;
                 var scheduledShifts = await _context.Shifts.AsNoTracking()

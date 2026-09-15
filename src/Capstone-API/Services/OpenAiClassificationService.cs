@@ -1,10 +1,8 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using BLL.Common;
 using BLL.DTOs;
 using DAL;
-using DAL.Models;
 using Microsoft.EntityFrameworkCore;
 using Capstone_API.Controllers;
 
@@ -16,10 +14,9 @@ public class GeminiClassificationService(HttpClient httpClient, IConfiguration c
     private const int MaxImageDataUrlLength = 10_000_000;
 
     public async Task<AiClassificationSuggestionDto> AnalyzeAsync(
-        Guid userId, ClassificationCatalogDto catalog, AnalyzeClassificationImagesDto request,
+        ClassificationCatalogDto catalog, AnalyzeClassificationImagesDto request,
         CancellationToken cancellationToken)
     {
-        await EnforceQuotaAsync(userId, cancellationToken);
         var images = request.ImageDataUrls
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .Distinct()
@@ -91,40 +88,6 @@ public class GeminiClassificationService(HttpClient httpClient, IConfiguration c
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
             ?? throw new InvalidOperationException("Gemini returned an invalid classification result.");
         return ValidateAndMap(catalog, suggestion);
-    }
-
-    /// <summary>
-    /// Counts the user's AI requests (feature ClothingClassification) against the configured
-    /// daily (Vietnam date) and total limits, then logs the attempt before calling Gemini.
-    /// </summary>
-    private async Task EnforceQuotaAsync(Guid userId, CancellationToken cancellationToken)
-    {
-        var today = VietnamTime.Today;
-        var limits = await context.AiPromptConfigurations.AsNoTracking()
-            .Where(x => x.Feature == AiPromptConfigurationsController.ClassificationFeature
-                        && x.IsActive != false)
-            .Select(x => new { x.DailyRequestLimit, x.TotalRequestLimit })
-            .FirstOrDefaultAsync(cancellationToken);
-        var usageDates = await context.AiUsageLogs.AsNoTracking()
-            .Where(x => x.UserId == userId
-                        && x.Feature == AiPromptConfigurationsController.ClassificationFeature
-                        && x.IsActive != false)
-            .Select(x => x.UsageDate)
-            .ToListAsync(cancellationToken);
-        var todayCount = usageDates.Count(x => x.Date == today);
-        if (limits?.DailyRequestLimit is int daily && todayCount >= daily)
-            throw new InvalidOperationException(
-                $"AI daily quota exceeded ({todayCount}/{daily} requests today). Please try again tomorrow.");
-        if (limits?.TotalRequestLimit is int total && usageDates.Count >= total)
-            throw new InvalidOperationException(
-                $"AI total quota exceeded ({usageDates.Count}/{total} requests). Please contact the manager.");
-        context.AiUsageLogs.Add(new AiUsageLog
-        {
-            Id = Guid.NewGuid(), UserId = userId,
-            Feature = AiPromptConfigurationsController.ClassificationFeature,
-            UsageDate = today, CreateAt = DateTime.UtcNow, IsActive = true
-        });
-        await context.SaveChangesAsync(cancellationToken);
     }
 
     private static string BuildPrompt(ClassificationCatalogDto catalog, string? customPrompt)

@@ -51,14 +51,7 @@ namespace Capstone_API.Controllers
             [FromQuery] Guid? warehouseId) =>
             Ok(await _service.GetPickupDatesAsync(month, latitude, longitude, warehouseId));
 
-        [HttpGet("eligible-warehouses")]
-        [Authorize(Roles = "Donor")]
-        public async Task<IActionResult> EligibleWarehouses(
-            [FromQuery] double latitude,
-            [FromQuery] double longitude,
-            [FromQuery] DateTime? pickupDate,
-            [FromQuery] decimal estimateWeight = 0) =>
-            Ok(await _service.GetEligibleWarehousesAsync(latitude, longitude, pickupDate, estimateWeight));
+
 
         [HttpPut("{id}")]
         [Authorize(Roles = "Donor")]
