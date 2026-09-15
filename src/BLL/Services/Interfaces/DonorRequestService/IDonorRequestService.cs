@@ -5,6 +5,7 @@ namespace BLL.Services.Interfaces.DonorRequestService
     public interface IDonorRequestService
     {
         Task<Guid> CreateAsync(Guid donorId, CreateDonorRequestDto dto);
+        Task<DonorNearestWarehouseDto> GetNearestWarehouseAsync(double latitude, double longitude);
 
         Task UpdateAsync(Guid donorId, Guid requestId, UpdateDonorRequestDto dto);
         Task UpdateShippingInfoAsync(Guid donorId, Guid requestId, UpdateShippingInfoDto dto);

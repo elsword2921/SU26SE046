@@ -103,7 +103,16 @@ public class ReceivingOperationsController(IReceivingOperationsService service) 
 
     [HttpGet("my-batches")]
     [Authorize(Roles = "ReceivingStaff")]
-    public async Task<IActionResult> MyBatches() => Ok(await service.GetMyBatchesAsync(CurrentUserId));
+    public async Task<IActionResult> MyBatches([FromQuery] string? stage)
+    {
+        if (stage is not null && stage is not ("receiving" or "completed" or "transferring"))
+            return BadRequest(new { message = "Invalid receiving stage." });
+        return Ok(await service.GetMyBatchesAsync(CurrentUserId, stage));
+    }
+
+    [HttpGet("my-overview")]
+    [Authorize(Roles = "ReceivingStaff")]
+    public async Task<IActionResult> MyOverview() => Ok(await service.GetMyOverviewAsync(CurrentUserId));
 
     [HttpGet("receiving-locations/{locationId:guid}/batches")]
     [Authorize(Roles = "ReceivingStaff")]

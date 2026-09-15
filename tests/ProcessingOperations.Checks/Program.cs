@@ -10,6 +10,8 @@ using Microsoft.Extensions.Configuration;
 // Always creates a fresh, isolated LocalDB database; never reads app connection strings.
 var database = "ReThreadsProcessingChecks_" + Guid.NewGuid().ToString("N");
 WeightedScoringChecks.Run();
+await DonorRoutingChecks.Run();
+await ReceivingStageChecks.Run();
 var options = new DbContextOptionsBuilder<AppDbContext>()
     .UseSqlServer($"Server=(localdb)\\MSSQLLocalDB;Database={database};Integrated Security=true;TrustServerCertificate=true").Options;
 AppDbContext Db() => new(options);
@@ -177,6 +179,7 @@ try
     }
     await WarehouseAreaChecks.Run(Db, manager.Id);
     await CharityReceiptChecks.Run(Db, warehouse.Id, manager.Id);
+    await OrganizationRegistrationChecks.Run(Db);
     Console.WriteLine("All processing checks passed.");
 }
 finally

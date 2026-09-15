@@ -32,7 +32,8 @@ public partial class ManagerAccountService(AppDbContext context) : IManagerAccou
             .Skip((page - 1) * pageSize).Take(pageSize)
             .Select(x => new ManagerAccountDto(x.Id, x.FullName, x.UserName, x.Email, x.PhoneNumber,
                 x.Role.RoleName, x.WarehouseId, x.Warehouse != null ? x.Warehouse.WarehouseName : null,
-                x.Address, x.UserStatus, x.AvatarUrl, x.CreateAt)).ToListAsync();
+                x.Address, x.UserStatus, x.AvatarUrl, x.CreateAt,
+                x.RepresentativeName, x.TaxCode, x.CertificateImageUrl)).ToListAsync();
         var roles = await context.Roles.AsNoTracking().Where(x => x.IsActive != false && AllowedRoles.Contains(x.RoleName))
             .OrderBy(x => x.RoleName).Select(x => new ManagerRoleOptionDto(x.Id, x.RoleName)).ToListAsync();
         return new ManagerAccountPageDto(items, total, page, pageSize, roles);

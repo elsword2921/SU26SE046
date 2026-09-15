@@ -3,7 +3,8 @@ namespace BLL.DTOs;
 public record ManagerRoleOptionDto(Guid Id, string Name);
 public record ManagerAccountDto(Guid Id, string FullName, string UserName, string Email,
     string PhoneNumber, string Role, Guid? WarehouseId, string? WarehouseName,
-    string Address, string UserStatus, string? AvatarUrl, DateTime? CreatedAt);
+    string Address, string UserStatus, string? AvatarUrl, DateTime? CreatedAt,
+    string? RepresentativeName = null, string? TaxCode = null, string? CertificateImageUrl = null);
 public record ManagerAccountPageDto(IReadOnlyList<ManagerAccountDto> Items, int TotalCount,
     int Page, int PageSize, IReadOnlyList<ManagerRoleOptionDto> Roles);
 

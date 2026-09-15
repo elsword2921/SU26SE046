@@ -39,6 +39,7 @@ namespace BLL.Services.Implements.DonorRequestService
                 "DonorDropOff" => "DonorDropOff",
                 _ => throw new InvalidOperationException("Delivery method must be StaffPickup or DonorDropOff.")
             };
+            ValidateEstimateWeight(dto.EstimateWeight);
             var dropOffMethod = deliveryMethod == "DonorDropOff" ? dto.DropOffMethod?.Trim() : null;
             var contactName = dto.ContactName?.Trim();
             var contactPhone = new string((dto.ContactPhoneNumber ?? string.Empty).Where(char.IsDigit).ToArray());
@@ -123,6 +124,7 @@ namespace BLL.Services.Implements.DonorRequestService
             date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
         public async Task UpdateAsync(Guid donorId, Guid requestId, UpdateDonorRequestDto dto)
         {
+            ValidateEstimateWeight(dto.EstimateWeight);
             var request =
                 await _unitOfWork
                 .DonorRequestRepository
@@ -354,6 +356,14 @@ namespace BLL.Services.Implements.DonorRequestService
                 .ToList();
         }
 
+        private static void ValidateEstimateWeight(decimal weight)
+        {
+            if (weight > 50m)
+                throw new InvalidOperationException("Mỗi đơn quyên góp nhận tối đa 50 kg. Vui lòng điều chỉnh khối lượng.");
+            if (weight <= 0 || decimal.Round(weight, 2) != weight)
+                throw new InvalidOperationException("Khối lượng ước tính phải lớn hơn 0 kg và có tối đa 2 chữ số thập phân.");
+        }
+
         private async Task ValidatePickupWindowAsync(Guid warehouseId, DateTime pickupDateTime)
         {
             var pickupTime = pickupDateTime.TimeOfDay;
@@ -369,12 +379,19 @@ namespace BLL.Services.Implements.DonorRequestService
                     "Khung giờ tiếp nhận không còn khả dụng tại kho gần nhất. Vui lòng chọn lại.");
         }
 
+        public async Task<DonorNearestWarehouseDto> GetNearestWarehouseAsync(double latitude, double longitude)
+        {
+            var warehouse = await ResolveNearestWarehouseAsync(latitude, longitude);
+            return new(warehouse.Id, warehouse.WarehouseName, warehouse.Address);
+        }
+
         private async Task<Warehouse> ResolveNearestWarehouseAsync(
             double latitude,
             double longitude,
             DateTime? serviceDate = null)
         {
-            if (latitude is < -90 or > 90 || longitude is < -180 or > 180)
+            if (!double.IsFinite(latitude) || !double.IsFinite(longitude) ||
+                latitude is < -90 or > 90 || longitude is < -180 or > 180)
                 throw new InvalidOperationException("Tọa độ địa chỉ không hợp lệ.");
             var warehouses = await _context.Warehouses
                 .Where(x => x.IsActive != false)

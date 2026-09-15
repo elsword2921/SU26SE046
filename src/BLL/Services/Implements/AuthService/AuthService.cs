@@ -46,7 +46,7 @@ public partial class AuthService(
             user.Warehouse?.WarehouseName,
             user.Warehouse?.Address,
             user.EmailConfirmed,
-            user.CreateAt);
+            user.CreateAt, user.RepresentativeName, user.TaxCode, user.CertificateImageUrl);
     }
 
     public async Task<AuthResponse> LoginAsync(LoginRequest request)
@@ -56,7 +56,7 @@ public partial class AuthService(
             x => x.UserName.ToLower() == name, false, x => x.Role);
         if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
             throw new UnauthorizedAccessException("Invalid username or password.");
-        if (!user.EmailConfirmed || user.UserStatus != "Active")
+        if (!user.EmailConfirmed || user.UserStatus != "Active" || user.IsActive != true)
             throw new AuthenticationException("Account verification is incomplete. Please verify your email.");
 
         return new AuthResponse
@@ -70,6 +70,7 @@ public partial class AuthService(
     public async Task<RegisterResponse> RegisterAsync(RegisterRequest request)
     {
         NormalizeAndValidate(request);
+        ValidateAccountType(request);
         var name = request.UserName.ToLowerInvariant();
         var email = request.Email.ToLowerInvariant();
         if (await dbContext.Users.AnyAsync(x => x.UserName.ToLower() == name))
@@ -79,13 +80,15 @@ public partial class AuthService(
         if (await dbContext.Users.AnyAsync(x => x.PhoneNumber == request.PhoneNumber))
             throw new InvalidOperationException("Phone number already exists.");
 
-        var role = await unitOfWork.RoleRepository.GetWithConditionAsync(x => x.RoleName == "Donor")
-            ?? throw new InvalidOperationException("Donor role is not configured.");
+        var role = await unitOfWork.RoleRepository.GetWithConditionAsync(x => x.RoleName == request.AccountType && x.IsActive != false)
+            ?? throw new InvalidOperationException("Registration role is not configured.");
         var user = new User
         {
             FullName = request.FullName, UserName = request.UserName, Email = request.Email,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password), RoleId = role.Id,
             Address = request.Address, PhoneNumber = request.PhoneNumber,
+            RepresentativeName = request.RepresentativeName, TaxCode = request.TaxCode,
+            CertificateImageUrl = request.CertificateImageUrl,
             UserStatus = "PendingVerification", EmailConfirmed = false,
             IsActive = false, CreateAt = VietnamTime.Now
         };
@@ -232,10 +235,10 @@ public partial class AuthService(
     private static string HashCode(string code) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(code)));
     private static void NormalizeAndValidate(RegisterRequest r)
     {
-        r.FullName = r.FullName.Trim(); r.UserName = r.UserName.Trim();
-        r.Email = r.Email.Trim().ToLowerInvariant();
+        r.FullName = (r.FullName ?? "").Trim(); r.UserName = (r.UserName ?? "").Trim();
+        r.Email = (r.Email ?? "").Trim().ToLowerInvariant();
         r.PhoneNumber = Regex.Replace(r.PhoneNumber ?? "", @"[\s.\-()]", "");
-        r.Address = r.Address.Trim();
+        r.Address = (r.Address ?? "").Trim();
         if (!UserNameRegex().IsMatch(r.UserName))
             throw new InvalidOperationException("Username must be 3-30 characters and contain only letters, numbers, dots or underscores.");
         if (!EmailRegex().IsMatch(r.Email) || r.Email.Length > 254)
@@ -245,6 +248,42 @@ public partial class AuthService(
         if (r.PhoneNumber.StartsWith("+84")) r.PhoneNumber = "0" + r.PhoneNumber[3..];
         if (r.FullName.Length is < 2 or > 100) throw new InvalidOperationException("Full name must contain 2-100 characters.");
         ValidatePassword(r.Password);
+    }
+
+    private void ValidateAccountType(RegisterRequest request)
+    {
+        // Public registration must never grant an internal staff or manager role.
+        if (request.AccountType is not ("Donor" or "CharityOrganization" or "RecyclingOrganization" or "DisposalOrganization"))
+            throw new InvalidOperationException("Loại tài khoản đăng ký không hợp lệ.");
+        if (request.AccountType == "Donor")
+        {
+            request.RepresentativeName = null;
+            request.TaxCode = null;
+            request.CertificateImageUrl = null;
+            return;
+        }
+
+        request.RepresentativeName = request.RepresentativeName?.Trim();
+        request.TaxCode = request.TaxCode?.Trim();
+        request.CertificateImageUrl = request.CertificateImageUrl?.Trim();
+        if (request.RepresentativeName is not { Length: >= 2 and <= 100 })
+            throw new InvalidOperationException("Tên người đại diện phải có từ 2 đến 100 ký tự.");
+        if (request.TaxCode is not { Length: >= 1 and <= 50 })
+            throw new InvalidOperationException("Vui lòng nhập mã số thuế hoặc số đăng ký tổ chức (tối đa 50 ký tự).");
+        if (request.Address.Length is < 5 or > 500)
+            throw new InvalidOperationException("Địa chỉ tổ chức phải có từ 5 đến 500 ký tự.");
+
+        var storageUrl = configuration["Supabase:Url"];
+        var bucket = configuration["Supabase:Bucket"] ?? "donation-images";
+        if (!Uri.TryCreate(storageUrl, UriKind.Absolute, out var storage) || storage.Scheme != "https")
+            throw new InvalidOperationException("Chưa cấu hình kho ảnh chứng nhận tổ chức.");
+        if (!Uri.TryCreate(request.CertificateImageUrl, UriKind.Absolute, out var certificate) ||
+            certificate.Scheme != "https" || certificate.Authority != storage.Authority ||
+            certificate.UserInfo.Length != 0 || certificate.Query.Length != 0 || certificate.Fragment.Length != 0 ||
+            !certificate.AbsolutePath.StartsWith($"/storage/v1/object/public/{bucket}/organization-certificates/", StringComparison.Ordinal) ||
+            !Regex.IsMatch(certificate.AbsolutePath, @"/[0-9]+-[0-9a-fA-F-]{36}\.(?:jpg|jpeg|png|webp)$") ||
+            request.CertificateImageUrl!.Length > 2048)
+            throw new InvalidOperationException("Vui lòng tải ảnh chứng nhận JPG, PNG hoặc WebP lên kho ảnh của hệ thống.");
     }
 
     private static void ValidatePassword(string password)

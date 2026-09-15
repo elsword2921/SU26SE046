@@ -33,6 +33,12 @@ namespace Capstone_API.Controllers
             });
         }
 
+        [HttpGet("nearest-warehouse")]
+        [Authorize(Roles = "Donor")]
+        public async Task<IActionResult> NearestWarehouse(
+            [FromQuery] double latitude, [FromQuery] double longitude) =>
+            Ok(await _service.GetNearestWarehouseAsync(latitude, longitude));
+
         [HttpGet("pickup-windows")]
         [Authorize(Roles = "Donor")]
         public async Task<IActionResult> PickupWindows(

@@ -23,7 +23,8 @@ public interface IReceivingOperationsService
     Task<List<ManagerShiftOverviewDto>> GetManagerShiftsAsync(
         Guid? warehouseId = null, DateTime? fromDate = null, DateTime? toDate = null);
     Task AssignRequestAsync(AssignDonationRequestDto dto);
-    Task<List<ReceivingBatchDto>> GetMyBatchesAsync(Guid staffId);
+    Task<List<ReceivingBatchDto>> GetMyBatchesAsync(Guid staffId, string? stage = null);
+    Task<ReceivingOverviewDto> GetMyOverviewAsync(Guid staffId);
     Task<List<ReceivingLocationBatchDto>> GetLocationBatchesAsync(Guid staffId, Guid locationId);
     Task<ReceivingBatchDto?> GetMyBatchAsync(Guid staffId, Guid batchId);
     Task StartBatchAsync(Guid staffId, Guid batchId);

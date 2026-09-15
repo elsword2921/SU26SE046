@@ -8,4 +8,8 @@ public class RegisterRequest
     public string Password { get; set; } = string.Empty;
     public string Address { get; set; } = string.Empty;
     public string PhoneNumber { get; set; } = string.Empty;
+    public string AccountType { get; set; } = "Donor";
+    public string? RepresentativeName { get; set; }
+    public string? TaxCode { get; set; }
+    public string? CertificateImageUrl { get; set; }
 }

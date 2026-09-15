@@ -14,4 +14,7 @@ public record CurrentUserProfileDto(
     string? WarehouseName,
     string? WarehouseAddress,
     bool EmailConfirmed,
-    DateTime? CreateAt);
+    DateTime? CreateAt,
+    string? RepresentativeName = null,
+    string? TaxCode = null,
+    string? CertificateImageUrl = null);

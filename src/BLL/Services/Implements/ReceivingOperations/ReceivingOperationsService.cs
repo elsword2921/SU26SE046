@@ -1153,10 +1153,46 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
         await context.SaveChangesAsync();
     }
 
-    public async Task<List<ReceivingBatchDto>> GetMyBatchesAsync(Guid staffId)
+    public async Task<ReceivingOverviewDto> GetMyOverviewAsync(Guid staffId)
     {
         await ReconcileCompletedPickupBatchesAsync(staffId);
-        var batches = await MyBatchQuery(staffId).OrderByDescending(x => x.IntakeDate).ToListAsync();
+        var query = context.IntakeBatches.AsNoTracking().Where(x => x.IsActive != false
+            && x.ReceivingTeam!.Members.Any(m => m.StaffId == staffId && m.IsActive != false));
+        // Summary cards, shift controls and sidebar do not need donor details or storage trees.
+        var batches = await query.OrderByDescending(x => x.IntakeDate).Select(x => new ReceivingBatchDto
+        {
+            Id = x.Id, Date = x.IntakeDate, Status = x.Status,
+            ShiftId = x.ReceivingTeam!.ShiftId, ShiftName = x.ReceivingTeam.Shift.ShiftName,
+            ShiftStatus = x.ReceivingTeam.Shift.Status, TeamStatus = x.ReceivingTeam.Status,
+            StartTime = x.ReceivingTeam.Shift.StartTime, EndTime = x.ReceivingTeam.Shift.EndTime,
+            TeamName = x.ReceivingTeam.TeamName, WarehouseAddress = x.Warehouse.Address,
+            TeamMembers = x.ReceivingTeam.Members.Where(m => m.IsActive != false)
+                .Select(m => new ReceivingTeamMemberDto(m.StaffId, m.Staff.FullName, m.Staff.PhoneNumber)).ToList()
+        }).ToListAsync();
+        var stats = await query.SelectMany(x => x.PickupAssignments.Where(a => a.IsActive != false))
+            .GroupBy(x => 1).Select(g => new
+            {
+                TotalCount = g.Count(),
+                ProcessedCount = g.Count(a => a.Status == "Received" || a.Status == "Rescheduled" || a.Status == "Cancelled"),
+                TotalWeight = g.Sum(a => a.Status == "Received" ? a.DonorRequest.ActualWeight ?? 0 : 0)
+            }).FirstOrDefaultAsync();
+        return new ReceivingOverviewDto(batches, stats?.TotalWeight ?? 0, stats?.ProcessedCount ?? 0, stats?.TotalCount ?? 0);
+    }
+
+    public async Task<List<ReceivingBatchDto>> GetMyBatchesAsync(Guid staffId, string? stage = null)
+    {
+        await ReconcileCompletedPickupBatchesAsync(staffId);
+        var query = MyBatchQuery(staffId);
+        query = stage switch
+        {
+            null => query,
+            "receiving" => query.Where(x => x.Status == "Planned" || x.Status == "Receiving"),
+            "completed" => query.Where(x => x.Status == "Completed"),
+            "transferring" => query.Where(x => x.Status == "AwaitingClassificationAssignment"
+                || x.Status == "AssignedToClassification" || x.Status == "SentToClassification"),
+            _ => throw new ArgumentException("Invalid receiving stage.", nameof(stage))
+        };
+        var batches = await query.OrderByDescending(x => x.IntakeDate).ToListAsync();
         var locationBatchCounts = await GetLocationBatchCountsAsync(batches.Select(x => x.WarehouseId));
         return batches.Select(x => MapBatch(x, locationBatchCounts)).ToList();
     }
@@ -1638,20 +1674,23 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
         return area;
     }
 
-    private IQueryable<IntakeBatch> MyBatchQuery(Guid staffId) => context.IntakeBatches.AsNoTracking()
-        .Include(x => x.Warehouse).ThenInclude(x => x.Areas).ThenInclude(x => x.Groups)
-            .ThenInclude(x => x.StorageLocations)
+    // Load independent collections separately: joining storage locations, members and
+    // assignments multiplies rows even when a staff member only has a few batches.
+    private IQueryable<IntakeBatch> MyBatchQuery(Guid staffId) => context.IntakeBatches.AsNoTracking().AsSplitQuery()
+        .Include(x => x.Warehouse).ThenInclude(x => x.Areas.Where(a => a.IsActive != false && a.AreaType == "Receiving"))
+            .ThenInclude(x => x.Groups.Where(g => g.IsActive != false))
+            .ThenInclude(x => x.StorageLocations.Where(location => location.IsActive != false))
         .Include(x => x.CurrentArea)
         .Include(x => x.CurrentAreaGroup)
         .Include(x => x.CurrentStorageLocation)
         .Include(x => x.WarehouseReceivedByStaff)
         .Include(x => x.ReceivingTeam!).ThenInclude(x => x.Shift)
-        .Include(x => x.ReceivingTeam!).ThenInclude(x => x.Members).ThenInclude(x => x.Staff)
-        .Include(x => x.PickupAssignments.Where(a => a.IsActive != false)).ThenInclude(x => x.DonorRequest).ThenInclude(x => x.Donor)
+        .Include(x => x.ReceivingTeam!).ThenInclude(x => x.Members.Where(m => m.IsActive != false)).ThenInclude(x => x.Staff)
+        .Include(x => x.PickupAssignments.Where(a => a.IsActive != false)).ThenInclude(x => x.DonorRequest)
         .Where(x => x.IsActive != false && x.ReceivingTeam!.Members.Any(m => m.StaffId == staffId && m.IsActive != false));
 
     private async Task<IntakeBatch> RequireMyBatch(Guid staffId, Guid batchId) =>
-        await context.IntakeBatches.Include(x => x.Warehouse).ThenInclude(x => x.Areas).ThenInclude(x => x.Groups)
+        await context.IntakeBatches.AsSplitQuery().Include(x => x.Warehouse).ThenInclude(x => x.Areas).ThenInclude(x => x.Groups)
             .ThenInclude(x => x.StorageLocations)
             .Include(x => x.CurrentArea)
             .Include(x => x.CurrentAreaGroup)

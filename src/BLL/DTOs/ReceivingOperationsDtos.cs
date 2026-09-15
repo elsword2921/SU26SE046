@@ -53,6 +53,8 @@ public record ReceivingLocationBatchDto(Guid Id, string Code, string Route,
     decimal TotalWeight, string Status, bool CanManage);
 public record ReceiveIntakeBatchAtWarehouseDto(Guid AreaGroupId, Guid StorageLocationId);
 
+public record ReceivingOverviewDto(List<ReceivingBatchDto> Batches, decimal TotalWeight, int ProcessedCount, int TotalCount);
+
 public class ReceivingBatchDto
 {
     public Guid Id { get; set; }
