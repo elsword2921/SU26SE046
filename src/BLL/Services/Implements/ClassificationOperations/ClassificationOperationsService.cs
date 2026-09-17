@@ -291,7 +291,11 @@ public partial class ClassificationOperationsService(AppDbContext context) : ICl
                 x.ClassificationAreaName, x.PlacedInClassificationAreaAt,
                 x.StorageLocationId,
                 x.DonationRequestSources.Where(s => s.IsActive != false)
-                    .Select(s => s.DonationRequest.RequestCode).Distinct().OrderBy(code => code).ToList()))
+                    .Select(s => s.DonationRequest.RequestCode).Distinct().OrderBy(code => code).ToList())
+                {
+                    GarmentGroupId = x.GarmentGroupId, GenderId = x.GenderId,
+                    TargetUserId = x.TargetUserId, ConditionGradeId = x.ConditionGradeId
+                })
             .ToListAsync();
     }
 

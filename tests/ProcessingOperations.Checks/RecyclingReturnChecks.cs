@@ -158,6 +158,10 @@ internal static class RecyclingReturnChecks
             await action(async processing => Check((await processing.GetByIdAsync(managerId, operationId)).Status == "Completed",
                 "inactive outputs do not block completion"));
             var scratch = await service.CreateManualBatchAsync(classificationStaff.Id, new(group.Id, gender.Id, target.Id, grade.Id));
+            var scratchSummary = (await service.GetGroupedBatchesAsync(classificationStaff.Id, null)).Single(x => x.Id == scratch.Id);
+            Check(scratchSummary.GarmentGroupId == group.Id && scratchSummary.GenderId == gender.Id
+                && scratchSummary.TargetUserId == target.Id && scratchSummary.ConditionGradeId == grade.Id,
+                "batch summaries expose exact category IDs for matching suggestions");
             var gradeB = await db.Categories.SingleAsync(x => x.Code == "GRADE_B");
             await service.UpdateManualBatchAsync(classificationStaff.Id, scratch.Id, new(group.Id, gender.Id, target.Id, gradeB.Id));
             Check((await service.GetGroupedBatchAsync(classificationStaff.Id, scratch.Id))!.ProcessingDirection == "Recycling", "editing empty manual batch updates grade and processing direction");

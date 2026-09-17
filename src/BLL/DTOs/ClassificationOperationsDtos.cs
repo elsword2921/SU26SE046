@@ -77,7 +77,13 @@ public record GroupedClassifiedBatchDto(Guid Id, string BatchCode, DateTime Clas
     string FabricType, string GarmentGroup, string ClothingType, string Gender, string TargetUser,
     string Size, string ConditionGrade, string ProcessingDirection, int TotalItem, string Status,
     decimal TotalWeight, string? ClassificationAreaName, DateTime? PlacedInClassificationAreaAt,
-    Guid? StorageLocationId, IReadOnlyList<string> DonationRequestCodes);
+    Guid? StorageLocationId, IReadOnlyList<string> DonationRequestCodes)
+{
+    public Guid? GarmentGroupId { get; init; }
+    public Guid? GenderId { get; init; }
+    public Guid? TargetUserId { get; init; }
+    public Guid? ConditionGradeId { get; init; }
+}
 
 public record GroupedClassifiedBatchDetailDto(Guid Id, string BatchCode, DateTime ClassificationDate,
     string FabricType, string GarmentGroup, string ClothingType, string Gender, string TargetUser,
