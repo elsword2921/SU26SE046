@@ -215,6 +215,12 @@ internal static class RecyclingReturnChecks
             Check(changedWeightRejected && classifiedLocation.CurrentWeightKg == 0, "placement cannot overwrite confirmed batch weight");
             await service.PlaceGroupedBatchAsync(classificationStaff.Id, grouped.Id, new(classifiedArea.Id, classifiedGroup.Id, classifiedLocation.Id, 10));
             Check(classifiedLocation.CurrentWeightKg == 10, "placement uses finalized weight for capacity");
+            var warehouseVisibility = await new WarehouseOperationsService(db).GetLayoutAsync(staffId, warehouseId);
+            var visibleArea = warehouseVisibility.Areas.Single(x => x.Id == classifiedArea.Id);
+            Check(visibleArea.ClassifiedBatches.Any(x => x.Id == grouped.Id && x.TotalItem == 1 && x.TotalWeight == 10)
+                && visibleArea.Locations.Single(x => x.Id == classifiedLocation.Id).InventoryCount == 1
+                && visibleArea.Locations.Single(x => x.Id == classifiedLocation.Id).CurrentWeightKg == 10,
+                "warehouse staff sees classified staging batch and matching location totals before warehouse receipt");
             (await db.ClassifiedBatches.SingleAsync(x => x.Id == grouped.Id)).ClassificationDate = VietnamTime.Today.AddDays(-10);
             await db.SaveChangesAsync();
             var occupiedLayout = await service.GetClassificationAreaLayoutAsync(classificationStaff.Id, VietnamTime.Today);
@@ -225,6 +231,9 @@ internal static class RecyclingReturnChecks
             catch (InvalidOperationException) { deleteBlocked = true; }
             Check(deleteBlocked, "cannot delete a batch already placed in classified area");
             await service.SendGroupedBatchToWarehouseAsync(classificationStaff.Id, grouped.Id);
+            var afterHandoff = await new WarehouseOperationsService(db).GetLayoutAsync(staffId, warehouseId);
+            Check(!afterHandoff.Areas.SelectMany(x => x.ClassifiedBatches).Any(x => x.Id == grouped.Id),
+                "batch leaves classified location display after handoff");
             var warehouse = new WarehouseOperationsService(db);
             await warehouse.ConfirmReceiptAsync(staffId, grouped.Id, new(10, 1, true, null));
             await warehouse.PutawayAsync(staffId, grouped.Id, new(storageLocation.Id, null));
@@ -246,6 +255,26 @@ internal static class RecyclingReturnChecks
             var inventory = await db.Inventories.SingleAsync(x => x.ClassifiedBatchId == grouped.Id);
             Check(inventory.Status == "Available" && inventory.ConditionRating == 1 && inventory.Quantity == 1
                 && inventory.TotalWeight == 10 && inventory.ProcessingDirection == "Charity", "recycled return finishes old classification/warehouse flow as fresh available inventory");
+            inventory.Quantity = 0;
+            inventory.TotalWeight = 0;
+            await db.SaveChangesAsync();
+            Check(!(await warehouse.GetLocationInventoryAsync(staffId, storageLocation.Id)).Any(x => x.Id == inventory.Id),
+                "fully depleted inventory is hidden from location contents");
+            var emptyLocation = (await warehouse.GetLayoutAsync(staffId, warehouseId)).Areas
+                .SelectMany(x => x.Locations).Single(x => x.Id == storageLocation.Id);
+            Check(emptyLocation.InventoryCount == 0 && emptyLocation.ItemQuantity == 0 && emptyLocation.CurrentWeightKg == 0,
+                "fully depleted inventory is excluded from location SKU and item counts");
+            Check(await db.Inventories.AnyAsync(x => x.Id == inventory.Id && x.IsActive != false),
+                "hiding depleted inventory preserves historical records");
+            inventory.TotalWeight = 2;
+            await db.SaveChangesAsync();
+            Check((await warehouse.GetLocationInventoryAsync(staffId, storageLocation.Id)).Any(x => x.Id == inventory.Id),
+                "zero quantity with remaining weight stays visible");
+            inventory.TotalWeight = 0;
+            inventory.Quantity = 1;
+            await db.SaveChangesAsync();
+            Check((await warehouse.GetLocationInventoryAsync(staffId, storageLocation.Id)).Any(x => x.Id == inventory.Id),
+                "zero weight with remaining items stays visible");
         }
     }
 }

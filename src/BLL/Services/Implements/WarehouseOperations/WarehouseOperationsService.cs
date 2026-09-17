@@ -170,7 +170,8 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
             .OrderBy(x => x.AisleCode).ThenBy(x => x.RackCode).ThenBy(x => x.ShelfCode).ThenBy(x => x.BinCode)
             .ToListAsync();
         var inventoryStats = await context.Inventories.AsNoTracking()
-            .Where(x => x.WarehouseId == warehouse.Id && x.StorageLocationId.HasValue && x.IsActive != false)
+            .Where(x => x.WarehouseId == warehouse.Id && x.StorageLocationId.HasValue && x.IsActive != false
+                && (x.Quantity > 0 || x.TotalWeight > 0))
             .GroupBy(x => x.StorageLocationId!.Value)
             .Select(x => new
             {
@@ -202,6 +203,18 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
                     ? x.WarehouseReceivedByStaff.FullName : null
             }).ToListAsync();
 
+        var classifiedPlacements = await context.ClassifiedBatches.AsNoTracking()
+            .Where(x => x.WarehouseId == warehouse.Id && x.IsActive != false
+                && x.StorageLocationId.HasValue && x.PlacedInClassificationAreaAt.HasValue
+                && (x.Status == "PlacedInClassifiedArea" || x.Status == "Open"))
+            .Select(x => new WarehouseClassifiedPlacementDto(x.Id, x.BatchCode, x.Status,
+                x.StorageLocationId!.Value, x.GarmentGroup, x.Gender, x.TargetUser,
+                x.ConditionRating == 1 ? "A" : x.ConditionRating == 2 ? "B" : "C",
+                x.ProcessingDirection, x.TotalItem, x.TotalWeight)).ToListAsync();
+        var classifiedLocations = locations.Where(x => areas.Any(a => a.Id == x.AreaId && a.AreaType == "Classified"))
+            .ToDictionary(x => x.Id);
+        classifiedPlacements = classifiedPlacements.Where(x => classifiedLocations.ContainsKey(x.StorageLocationId)).ToList();
+
         var stagingPlacements = await context.IntakeBatches.AsNoTracking()
             .Where(x => x.WarehouseId == warehouse.Id && x.CurrentStorageLocationId.HasValue
                 && x.IsActive != false)
@@ -213,6 +226,13 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
                 x.TotalWeight
             })
             .ToListAsync();
+        stagingPlacements.AddRange(classifiedPlacements.Select(x => new
+        {
+            CurrentAreaId = (Guid?)classifiedLocations[x.StorageLocationId].AreaId,
+            CurrentAreaGroupId = classifiedLocations[x.StorageLocationId].AreaGroupId,
+            LocationId = x.StorageLocationId,
+            x.TotalWeight
+        }));
         var stagingAreaStats = stagingPlacements.Where(x => x.CurrentAreaId.HasValue)
             .GroupBy(x => x.CurrentAreaId!.Value)
             .ToDictionary(x => x.Key, x => new { BatchCount = x.Count(), WeightKg = x.Sum(y => y.TotalWeight) });
@@ -242,7 +262,7 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
                 return new WarehouseLocationLayoutDto(x.Id, x.AreaGroupId, x.LocationCode, x.AisleCode, x.RackCode,
                     x.ShelfCode, x.BinCode, x.PreferredGarmentGroup, x.PreferredProcessingDirection,
                     x.CapacityKg,
-                    isStagingArea ? stagingStats?.WeightKg ?? x.CurrentWeightKg : stats?.WeightKg ?? x.CurrentWeightKg,
+                    isStagingArea ? stagingStats?.WeightKg ?? x.CurrentWeightKg : stats?.WeightKg ?? 0,
                     x.Status,
                     isStagingArea ? stagingStats?.BatchCount ?? 0 : stats?.Count ?? 0,
                     isStagingArea ? stagingStats?.BatchCount ?? 0 : stats?.Quantity ?? 0);
@@ -253,7 +273,10 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
                 .Select(x => new WarehouseStagingBatchDto(x.Id, x.BatchCode, x.Status,
                     x.TotalWeight, x.IntakeDate, x.DonationRequests, x.TeamName,
                     x.CurrentStorageLocationId, x.LocationCode, x.GroupName,
-                    x.WarehouseReceivedAt, x.WarehouseReceivedBy)).ToList(), area.ProcessingDirection);
+                    x.WarehouseReceivedAt, x.WarehouseReceivedBy)).ToList(), area.ProcessingDirection)
+            {
+                ClassifiedBatches = classifiedPlacements.Where(x => classifiedLocations[x.StorageLocationId].AreaId == area.Id).ToList()
+            };
         }).ToList();
         // The warehouse total must represent everything physically present in its areas:
         // intake batches in staging areas plus classified inventory in storage areas.
@@ -874,7 +897,8 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
         return await context.Inventories.AsNoTracking()
             .Include(x => x.ClassifiedBatch)
             .Include(x => x.StorageLocation)!.ThenInclude(x => x!.Area)
-            .Where(x => x.StorageLocationId == locationId && x.IsActive != false)
+            .Where(x => x.StorageLocationId == locationId && x.IsActive != false
+                && (x.Quantity > 0 || x.TotalWeight > 0))
             .OrderBy(x => x.Sku)
             .Select(x => new WarehouseInventoryDto(x.Id, x.Sku, x.ClassifiedBatchId!.Value,
                 x.ClassifiedBatch!.BatchCode, x.StorageLocation!.LocationCode,

@@ -10,7 +10,13 @@ public record WarehouseAreaLayoutDto(Guid Id, string AreaName, string? Descripti
     string AreaType, decimal CapacityKg, decimal CurrentWeightKg,
     IReadOnlyList<WarehouseGroupLayoutDto> Groups,
     IReadOnlyList<WarehouseLocationLayoutDto> Locations,
-    IReadOnlyList<WarehouseStagingBatchDto> IntakeBatches, string? ProcessingDirection = null);
+    IReadOnlyList<WarehouseStagingBatchDto> IntakeBatches, string? ProcessingDirection = null)
+{
+    public IReadOnlyList<WarehouseClassifiedPlacementDto> ClassifiedBatches { get; init; } = [];
+}
+public record WarehouseClassifiedPlacementDto(Guid Id, string BatchCode, string Status,
+    Guid StorageLocationId, string GarmentGroup, string Gender, string TargetUser,
+    string ConditionGrade, string ProcessingDirection, int TotalItem, decimal TotalWeight);
 public record WarehouseStagingBatchDto(Guid Id, string BatchCode, string Status,
     decimal TotalWeight, DateTime IntakeDate, int DonationRequests, string? TeamName,
     Guid? StorageLocationId, string? LocationCode, string? GroupName,
