@@ -2,13 +2,14 @@ using System.Net.Mail;
 using System.Text.RegularExpressions;
 using BLL.DTOs;
 using BLL.Services.Interfaces.ManagerAccounts;
+using BLL.Services.Interfaces.AuthService;
 using DAL;
 using DAL.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace BLL.Services.Implements.ManagerAccounts;
 
-public partial class ManagerAccountService(AppDbContext context) : IManagerAccountService
+public partial class ManagerAccountService(AppDbContext context, IEmailVerificationSender emailSender) : IManagerAccountService
 {
     private static readonly string[] AllowedRoles =
         ["Donor", "CharityOrganization", "RecyclingOrganization", "DisposalOrganization", "ReceivingStaff", "ClassificationStaff", "WarehouseStaff"];
@@ -28,7 +29,7 @@ public partial class ManagerAccountService(AppDbContext context) : IManagerAccou
             query = query.Where(x => x.FullName.ToLower().Contains(term) || x.PhoneNumber.Contains(term));
         }
         var total = await query.CountAsync();
-        var items = await query.OrderBy(x => x.FullName).ThenBy(x => x.UserName)
+        var items = await query.OrderByDescending(x => x.UserStatus == "PendingApproval").ThenBy(x => x.FullName).ThenBy(x => x.UserName)
             .Skip((page - 1) * pageSize).Take(pageSize)
             .Select(x => new ManagerAccountDto(x.Id, x.FullName, x.UserName, x.Email, x.PhoneNumber,
                 x.Role.RoleName, x.WarehouseId, x.Warehouse != null ? x.Warehouse.WarehouseName : null,
@@ -64,6 +65,8 @@ public partial class ManagerAccountService(AppDbContext context) : IManagerAccou
             .FirstOrDefaultAsync(x => x.Id == userId && x.IsActive != false)
             ?? throw new InvalidOperationException("Account not found.");
         EnsureManagedRole(user.Role.RoleName);
+        if (user.UserStatus == "PendingApproval")
+            throw new InvalidOperationException("Vui lòng duyệt tài khoản tổ chức trước khi chỉnh sửa.");
         var role = await ValidateAsync(userId, dto.FullName, dto.UserName, dto.Email, dto.PhoneNumber,
             dto.NewPassword, dto.RoleId, dto.WarehouseId, dto.Address);
         if (dto.UserStatus is not ("Active" or "Inactive"))
@@ -102,10 +105,30 @@ public partial class ManagerAccountService(AppDbContext context) : IManagerAccou
             .FirstOrDefaultAsync(x => x.Id == userId && x.IsActive != false)
             ?? throw new InvalidOperationException("Account not found.");
         EnsureManagedRole(user.Role.RoleName);
+        if (user.UserStatus == "PendingApproval")
+            throw new InvalidOperationException("Vui lòng dùng chức năng phê duyệt tài khoản tổ chức.");
         user.UserStatus = locked ? "Inactive" : "Active";
         user.UpdateAt = DateTime.UtcNow;
         user.UpdatedBy = managerId;
         await context.SaveChangesAsync();
+    }
+
+    public async Task ApproveAsync(Guid managerId, Guid userId)
+    {
+        await using var transaction = await context.Database.BeginTransactionAsync();
+        var user = await context.Users.AsNoTracking().Include(x => x.Role).SingleOrDefaultAsync(x => x.Id == userId);
+        if (user is null || user.Role.RoleName is not ("CharityOrganization" or "RecyclingOrganization" or "DisposalOrganization"))
+            throw new InvalidOperationException("Không tìm thấy tài khoản tổ chức chờ duyệt.");
+        var updated = await context.Users.Where(x => x.Id == userId && x.IsActive == true && x.EmailConfirmed && x.UserStatus == "PendingApproval")
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.UserStatus, "Active")
+                .SetProperty(x => x.UpdatedBy, managerId).SetProperty(x => x.UpdateAt, DateTime.UtcNow));
+        if (updated != 1) throw new InvalidOperationException("Tài khoản không ở trạng thái chờ phê duyệt.");
+        try { await emailSender.SendOrganizationApprovedAsync(user.Email, user.FullName); }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException("Không gửi được email thông báo. Tài khoản vẫn chờ duyệt; vui lòng thử lại.", ex);
+        }
+        await transaction.CommitAsync();
     }
 
     private async Task<Role> ValidateAsync(Guid? userId, string fullName, string userName, string email,

@@ -32,5 +32,9 @@ public class ManagerAccountsController(IManagerAccountService service) : Control
     public async Task<IActionResult> Delete(Guid userId)
     { await service.DeleteAsync(CurrentUserId, userId); return NoContent(); }
 
+    [HttpPost("{userId:guid}/approve")]
+    public async Task<IActionResult> Approve(Guid userId)
+    { await service.ApproveAsync(CurrentUserId, userId); return NoContent(); }
+
     private Guid CurrentUserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 }

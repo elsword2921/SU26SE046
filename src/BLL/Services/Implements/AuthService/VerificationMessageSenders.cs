@@ -12,6 +12,22 @@ public class EmailVerificationSender(
     IConfiguration configuration,
     ILogger<EmailVerificationSender> logger) : IEmailVerificationSender
 {
+    public async Task SendOrganizationApprovedAsync(string email, string recipientName)
+    {
+        if (!bool.TryParse(configuration["Notifications:Email:Enabled"], out var enabled) || !enabled)
+            throw new InvalidOperationException("Chưa bật dịch vụ email thông báo phê duyệt.");
+        using var client = CreateClient();
+        using var message = new MailMessage
+        {
+            From = new MailAddress(configuration["Notifications:Email:From"]!, "ReThreads", Encoding.UTF8),
+            Subject = "ReThreads - Tài khoản tổ chức đã được phê duyệt",
+            SubjectEncoding = Encoding.UTF8, BodyEncoding = Encoding.UTF8, IsBodyHtml = true,
+            Body = $"<div style='font-family:Arial,sans-serif;line-height:1.6;max-width:560px;margin:auto;padding:28px'><h2 style='color:#087d5e'>Tài khoản đã được phê duyệt</h2><p>Xin chào {WebUtility.HtmlEncode(recipientName)},</p><p>Manager đã phê duyệt tài khoản tổ chức của bạn trên ReThreads. Bạn có thể đăng nhập bằng tài khoản đã đăng ký để sử dụng hệ thống.</p><p>Cảm ơn bạn đã đồng hành cùng ReThreads.</p></div>"
+        };
+        message.To.Add(email);
+        await client.SendMailAsync(message);
+    }
+
     public async Task SendPasswordResetAsync(string email, string recipientName, string code)
     {
         if (!bool.TryParse(configuration["Notifications:Email:Enabled"], out var enabled) || !enabled)

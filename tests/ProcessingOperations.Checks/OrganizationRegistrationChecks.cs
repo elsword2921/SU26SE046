@@ -78,14 +78,35 @@ internal static class OrganizationRegistrationChecks
             try { await service.LoginAsync(new() { UserName = request.UserName, Password = request.Password }); throw new Exception("Unverified login was accepted"); }
             catch (AuthenticationException) { Check(true, "unverified organization or donor cannot log in"); }
             var verified = await service.VerifyRegistrationAsync(new() { UserId = user.Id, Code = sender.Codes[request.Email] });
-            Check(verified.AccountActivated && verified.EmailConfirmed, "existing OTP flow activates " + role);
+            Check(verified.EmailConfirmed && verified.AccountActivated == (role == "Donor"), "OTP activation respects approval requirement for " + role);
+            if (role != "Donor")
+            {
+                var manager = new ManagerAccountService(db, sender);
+                var accounts = await manager.SearchAsync(null, role, request.FullName, 1, 100);
+                Check(accounts.Items.Any(x => x.Id == user.Id && x.UserStatus == "PendingApproval"), "verified organization appears in approval queue");
+                try { await service.LoginAsync(new() { UserName = request.UserName, Password = request.Password }); throw new Exception("Pending organization login was accepted"); }
+                catch (AuthenticationException e) { Check(e.Message.Contains("Manager"), "pending organization cannot log in"); }
+                try { await manager.SetLockedAsync(Guid.NewGuid(), user.Id, false); throw new Exception("Unlock bypassed approval"); }
+                catch (InvalidOperationException) { Check(true, "unlock cannot bypass approval"); }
+                sender.FailApproval = true;
+                try { await manager.ApproveAsync(Guid.NewGuid(), user.Id); throw new Exception("Approval ignored email failure"); }
+                catch (InvalidOperationException) { }
+                await db.Entry(user).ReloadAsync();
+                Check(user.UserStatus == "PendingApproval", "email failure rolls back activation");
+                sender.FailApproval = false;
+                await manager.ApproveAsync(Guid.NewGuid(), user.Id);
+                await db.Entry(user).ReloadAsync();
+                Check(user.UserStatus == "Active" && sender.ApprovedEmails.Count(x => x == request.Email) == 1, "approval activates and emails organization");
+                try { await manager.ApproveAsync(Guid.NewGuid(), user.Id); throw new Exception("Duplicate approval accepted"); }
+                catch (InvalidOperationException) { Check(sender.ApprovedEmails.Count(x => x == request.Email) == 1, "duplicate approval sends no extra email"); }
+            }
             var login = await service.LoginAsync(new() { UserName = request.UserName, Password = request.Password });
             Check(login.Role == role && !string.IsNullOrEmpty(login.Token), "login retains correct organization role");
             var profile = await service.GetCurrentUserProfileAsync(user.Id);
             Check(profile.CertificateImageUrl == user.CertificateImageUrl && profile.RepresentativeName == user.RepresentativeName, "profile returns registration details");
             if (role != "Donor")
             {
-                var accounts = await new ManagerAccountService(db).SearchAsync(null, role, request.FullName, 1, 100);
+                var accounts = await new ManagerAccountService(db, sender).SearchAsync(null, role, request.FullName, 1, 100);
                 Check(accounts.Items.Any(x => x.Id == user.Id && x.CertificateImageUrl == request.CertificateImageUrl), "manager can inspect organization certificate");
             }
             await Reject(request, "duplicate registration is rejected");
@@ -99,6 +120,14 @@ internal static class OrganizationRegistrationChecks
     private sealed class CapturingEmailSender : IEmailVerificationSender
     {
         public Dictionary<string, string> Codes { get; } = new();
+        public bool FailApproval { get; set; }
+        public List<string> ApprovedEmails { get; } = [];
+        public Task SendOrganizationApprovedAsync(string email, string recipientName)
+        {
+            if (FailApproval) throw new InvalidOperationException("Simulated mail failure");
+            ApprovedEmails.Add(email);
+            return Task.CompletedTask;
+        }
         public Task SendAsync(string email, string recipientName, string code) { Codes[email] = code; return Task.CompletedTask; }
         public Task SendPasswordResetAsync(string email, string recipientName, string code) => Task.CompletedTask;
     }

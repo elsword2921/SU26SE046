@@ -9,4 +9,5 @@ public interface IManagerAccountService
     Task UpdateAsync(Guid managerId, Guid userId, UpdateManagerAccountDto dto);
     Task SetLockedAsync(Guid managerId, Guid userId, bool locked);
     Task DeleteAsync(Guid managerId, Guid userId);
+    Task ApproveAsync(Guid managerId, Guid userId);
 }

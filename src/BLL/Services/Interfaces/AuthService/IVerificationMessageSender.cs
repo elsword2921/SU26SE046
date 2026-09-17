@@ -4,4 +4,5 @@ public interface IEmailVerificationSender
 {
     Task SendAsync(string email, string recipientName, string code);
     Task SendPasswordResetAsync(string email, string recipientName, string code);
+    Task SendOrganizationApprovedAsync(string email, string recipientName);
 }

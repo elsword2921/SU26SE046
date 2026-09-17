@@ -56,6 +56,8 @@ public partial class AuthService(
             x => x.UserName.ToLower() == name, false, x => x.Role);
         if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
             throw new UnauthorizedAccessException("Invalid username or password.");
+        if (user.EmailConfirmed && user.UserStatus == "PendingApproval")
+            throw new AuthenticationException("Tài khoản tổ chức đang chờ Manager phê duyệt. Bạn sẽ nhận email khi tài khoản được duyệt.");
         if (!user.EmailConfirmed || user.UserStatus != "Active" || user.IsActive != true)
             throw new AuthenticationException("Account verification is incomplete. Please verify your email.");
 
@@ -111,8 +113,10 @@ public partial class AuthService(
     {
         if (!SixDigitCodeRegex().IsMatch(request.Code ?? ""))
             throw new InvalidOperationException("Verification code must contain exactly 6 digits.");
-        var user = await dbContext.Users.FindAsync(request.UserId)
+        var user = await dbContext.Users.Include(x => x.Role).SingleOrDefaultAsync(x => x.Id == request.UserId)
             ?? throw new InvalidOperationException("Account was not found.");
+        if (user.UserStatus != "PendingVerification" || user.EmailConfirmed)
+            throw new InvalidOperationException("Tài khoản không còn chờ xác nhận email.");
         var verification = await dbContext.UserVerificationCodes
             .Where(x => x.UserId == request.UserId && x.Purpose == RegistrationPurpose && x.IsActive == true)
             .OrderByDescending(x => x.CreateAt).FirstOrDefaultAsync()
@@ -133,12 +137,13 @@ public partial class AuthService(
         verification.VerifiedAt = VietnamTime.Now;
         verification.IsActive = false;
         user.EmailConfirmed = true;
-        var activated = user.EmailConfirmed;
-        if (activated) { user.UserStatus = "Active"; user.IsActive = true; }
+        var activated = user.Role.RoleName == "Donor";
+        user.UserStatus = activated ? "Active" : "PendingApproval";
+        user.IsActive = true;
         user.UpdateAt = VietnamTime.Now;
         await dbContext.SaveChangesAsync();
         return new VerificationResponse(user.EmailConfirmed, activated,
-            activated ? "Account verification completed." : "Email verification failed.");
+            activated ? "Tài khoản đã kích hoạt. Bạn có thể đăng nhập." : "Đã xác nhận email. Tài khoản tổ chức đang chờ Manager phê duyệt. Chúng tôi sẽ gửi email khi tài khoản được duyệt.");
     }
 
     public async Task ResendVerificationAsync(ResendVerificationRequest request)
