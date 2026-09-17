@@ -1648,6 +1648,8 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
         var batch = await RequireMyBatch(staffId, batchId);
         if (batch.Status != "ReceivedAtWarehouse")
             throw new InvalidOperationException("The intake batch must be checked into the warehouse receiving area first.");
+        if (batch.TotalWeight < 10m)
+            throw new InvalidOperationException("Lô hàng phải có khối lượng thực nhận từ 10 kg trở lên mới được gửi sang phân loại.");
         if (!batch.CurrentAreaId.HasValue || !batch.CurrentAreaGroupId.HasValue
             || !batch.CurrentStorageLocationId.HasValue || batch.CurrentArea?.AreaType != "Receiving")
             throw new InvalidOperationException("The intake batch must have a valid location in the warehouse receiving area.");
