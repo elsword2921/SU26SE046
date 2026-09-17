@@ -179,7 +179,18 @@ internal static class RecyclingReturnChecks
             try { await service.UpdateManualBatchAsync(classificationStaff.Id, scratch.Id, new(group.Id, gender.Id, target.Id, gradeB.Id)); }
             catch (InvalidOperationException) { rejected = true; }
             Check(rejected, "cannot edit batch attributes to mismatch existing items");
-            await service.FinalizeManualBatchAsync(classificationStaff.Id, scratch.Id);
+            foreach (var invalidWeight in new[] { -1m, 0m, 9.99m, 10.001m })
+            {
+                var weightRejected = false;
+                try { await service.FinalizeManualBatchAsync(classificationStaff.Id, scratch.Id, new(invalidWeight)); }
+                catch (InvalidOperationException) { weightRejected = true; }
+                var draft = await db.ClassifiedBatches.AsNoTracking().SingleAsync(x => x.Id == scratch.Id);
+                Check(weightRejected && draft.Status == "Draft" && draft.TotalWeight == 0,
+                    $"finalizing rejects {invalidWeight} kg without changing the draft");
+            }
+            await service.FinalizeManualBatchAsync(classificationStaff.Id, scratch.Id, new(10.01m));
+            Check((await db.ClassifiedBatches.AsNoTracking().SingleAsync(x => x.Id == scratch.Id)).TotalWeight == 10.01m,
+                "finalizing persists fractional weight above minimum");
             await service.DeleteManualBatchAsync(classificationStaff.Id, scratch.Id);
             Check((await service.GetBatchesAsync(classificationStaff.Id)).Any(x => x.Id == intakeId),
                 "deleting a grouped batch restores its intake to the classified queue");
@@ -188,7 +199,7 @@ internal static class RecyclingReturnChecks
                 "delete unplaced batch soft deletes grouping and releases classified items");
             var grouped = await service.CreateManualBatchAsync(classificationStaff.Id, new(group.Id, gender.Id, target.Id, grade.Id));
             await service.AssignItemsAsync(classificationStaff.Id, grouped.Id, [item.Id]);
-            await service.FinalizeManualBatchAsync(classificationStaff.Id, grouped.Id);
+            await service.FinalizeManualBatchAsync(classificationStaff.Id, grouped.Id, new(10));
             Check((await db.ClassifiedBatches.SingleAsync(x => x.Id == grouped.Id)).Status == "ReadyForPlacement", "reclassified output enters existing grouped batch putaway flow");
             Check(await db.ClassifiedItems.AnyAsync(x => x.ClassifiedBatchId == grouped.Id && x.Batch.ProcessingOperationOutputId == outputId), "new classified batch retains recycling provenance through intake items");
             var classifiedArea = new WarehouseArea { Id = Guid.NewGuid(), WarehouseId = warehouseId, AreaType = "Classified", AreaName = "Classified staging", CapacityKg = 100 };
@@ -198,7 +209,12 @@ internal static class RecyclingReturnChecks
             var storageLocation = new StorageLocation { Id = Guid.NewGuid(), WarehouseId = warehouseId, Area = storageArea, LocationCode = "CHARITY-01", CapacityKg = 100, PreferredProcessingDirection = "Charity" };
             db.AddRange(classifiedLocation, storageLocation);
             await db.SaveChangesAsync();
-            await service.PlaceGroupedBatchAsync(classificationStaff.Id, grouped.Id, new(classifiedArea.Id, classifiedGroup.Id, classifiedLocation.Id, 2));
+            var changedWeightRejected = false;
+            try { await service.PlaceGroupedBatchAsync(classificationStaff.Id, grouped.Id, new(classifiedArea.Id, classifiedGroup.Id, classifiedLocation.Id, 2)); }
+            catch (InvalidOperationException) { changedWeightRejected = true; }
+            Check(changedWeightRejected && classifiedLocation.CurrentWeightKg == 0, "placement cannot overwrite confirmed batch weight");
+            await service.PlaceGroupedBatchAsync(classificationStaff.Id, grouped.Id, new(classifiedArea.Id, classifiedGroup.Id, classifiedLocation.Id, 10));
+            Check(classifiedLocation.CurrentWeightKg == 10, "placement uses finalized weight for capacity");
             (await db.ClassifiedBatches.SingleAsync(x => x.Id == grouped.Id)).ClassificationDate = VietnamTime.Today.AddDays(-10);
             await db.SaveChangesAsync();
             var occupiedLayout = await service.GetClassificationAreaLayoutAsync(classificationStaff.Id, VietnamTime.Today);
@@ -210,7 +226,7 @@ internal static class RecyclingReturnChecks
             Check(deleteBlocked, "cannot delete a batch already placed in classified area");
             await service.SendGroupedBatchToWarehouseAsync(classificationStaff.Id, grouped.Id);
             var warehouse = new WarehouseOperationsService(db);
-            await warehouse.ConfirmReceiptAsync(staffId, grouped.Id, new(2, 1, true, null));
+            await warehouse.ConfirmReceiptAsync(staffId, grouped.Id, new(10, 1, true, null));
             await warehouse.PutawayAsync(staffId, grouped.Id, new(storageLocation.Id, null));
             var fullList = await warehouse.GetInboundBatchesAsync(staffId, warehouseId);
             var summaries = await warehouse.GetInboundBatchesAsync(staffId, warehouseId, false);
@@ -229,7 +245,7 @@ internal static class RecyclingReturnChecks
                 "SQL dashboard aggregates preserve stored, available and reserved stock counts");
             var inventory = await db.Inventories.SingleAsync(x => x.ClassifiedBatchId == grouped.Id);
             Check(inventory.Status == "Available" && inventory.ConditionRating == 1 && inventory.Quantity == 1
-                && inventory.TotalWeight == 2 && inventory.ProcessingDirection == "Charity", "recycled return finishes old classification/warehouse flow as fresh available inventory");
+                && inventory.TotalWeight == 10 && inventory.ProcessingDirection == "Charity", "recycled return finishes old classification/warehouse flow as fresh available inventory");
         }
     }
 }

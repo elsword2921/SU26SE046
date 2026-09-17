@@ -117,8 +117,8 @@ public class ClassificationOperationsController(IClassificationOperationsService
     { await service.RemoveItemAsync(CurrentUserId, groupedBatchId, itemId); return NoContent(); }
 
     [HttpPost("grouped-batches/{groupedBatchId:guid}/finalize")]
-    public async Task<IActionResult> FinalizeManualBatch(Guid groupedBatchId)
-    { await service.FinalizeManualBatchAsync(CurrentUserId, groupedBatchId); return NoContent(); }
+    public async Task<IActionResult> FinalizeManualBatch(Guid groupedBatchId, FinalizeManualClassifiedBatchDto dto)
+    { await service.FinalizeManualBatchAsync(CurrentUserId, groupedBatchId, dto); return NoContent(); }
 
     [HttpPost("grouped-batches/{groupedBatchId:guid}/send-to-warehouse")]
     public async Task<IActionResult> SendGroupedBatchToWarehouse(Guid groupedBatchId)

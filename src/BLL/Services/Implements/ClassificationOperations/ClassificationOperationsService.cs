@@ -556,8 +556,10 @@ public partial class ClassificationOperationsService(AppDbContext context) : ICl
         await context.SaveChangesAsync();
     }
 
-    public async Task FinalizeManualBatchAsync(Guid staffId, Guid groupedBatchId)
+    public async Task FinalizeManualBatchAsync(Guid staffId, Guid groupedBatchId, FinalizeManualClassifiedBatchDto dto)
     {
+        if (dto.ActualWeightKg < 10m || decimal.Round(dto.ActualWeightKg, 2) != dto.ActualWeightKg)
+            throw new InvalidOperationException("Khối lượng batch phải từ 10 kg trở lên và có tối đa 2 chữ số thập phân để hoàn tất gom nhóm.");
         var warehouseId = await RequireStaffWarehouseIdAsync(staffId);
         var batch = await context.ClassifiedBatches.Include(x => x.Items)
             .FirstOrDefaultAsync(x => x.Id == groupedBatchId && x.WarehouseId == warehouseId && x.IsActive != false)
@@ -567,6 +569,7 @@ public partial class ClassificationOperationsService(AppDbContext context) : ICl
         if (!batch.Items.Any(x => x.IsActive != false))
             throw new InvalidOperationException("Add at least one item before finalizing the classified batch.");
         batch.TotalItem = batch.Items.Count(x => x.IsActive != false);
+        batch.TotalWeight = dto.ActualWeightKg;
         batch.Status = "ReadyForPlacement";
         batch.UpdateAt = DateTime.UtcNow;
         batch.UpdatedBy = staffId;
@@ -737,6 +740,8 @@ public partial class ClassificationOperationsService(AppDbContext context) : ICl
         if (dto.ActualWeightKg <= 0)
             throw new InvalidOperationException("Actual weight must be greater than zero.");
         var actualWeightKg = decimal.Round(dto.ActualWeightKg, 2, MidpointRounding.AwayFromZero);
+        if (batch.Status == "ReadyForPlacement" && batch.TotalWeight > 0 && dto.ActualWeightKg != batch.TotalWeight)
+            throw new InvalidOperationException("Khối lượng xếp khu phải bằng khối lượng đã xác nhận khi hoàn tất gom nhóm.");
 
         var area = await context.WarehouseAreas.FirstOrDefaultAsync(x => x.Id == dto.AreaId
             && x.WarehouseId == batch.WarehouseId && x.AreaType == "Classified" && x.IsActive != false)

@@ -102,6 +102,7 @@ public record SendGroupedBatchesToWarehouseResultDto(int Sent, int Skipped);
 public record CreateManualClassifiedBatchDto(Guid GarmentGroupId, Guid GenderId,
     Guid TargetUserId, Guid ConditionGradeId);
 public record AssignItemsToClassifiedBatchDto(IReadOnlyList<Guid> ItemIds);
+public record FinalizeManualClassifiedBatchDto(decimal ActualWeightKg);
 public record UnassignedClassifiedItemDto(Guid Id, string ItemCode, string IntakeBatchCode,
     string GarmentGroup, string Gender, string TargetUser, string Size, string ConditionGrade,
     string ProcessingDirection, DateTime ClassifiedAt, Guid? GarmentGroupId, Guid? GenderId,

@@ -25,7 +25,7 @@ public interface IClassificationOperationsService
     Task DeleteManualBatchAsync(Guid staffId, Guid batchId);
     Task AssignItemsAsync(Guid staffId, Guid groupedBatchId, IReadOnlyList<Guid> itemIds);
     Task RemoveItemAsync(Guid staffId, Guid groupedBatchId, Guid itemId);
-    Task FinalizeManualBatchAsync(Guid staffId, Guid groupedBatchId);
+    Task FinalizeManualBatchAsync(Guid staffId, Guid groupedBatchId, FinalizeManualClassifiedBatchDto dto);
     Task PlaceGroupedBatchAsync(Guid staffId, Guid groupedBatchId, PlaceGroupedClassifiedBatchDto dto);
     Task SendGroupedBatchToWarehouseAsync(Guid staffId, Guid groupedBatchId);
     Task<SendGroupedBatchesToWarehouseResultDto> SendGroupedBatchesToWarehouseAsync(
