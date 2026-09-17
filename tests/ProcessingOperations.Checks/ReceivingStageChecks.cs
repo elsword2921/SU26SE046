@@ -48,6 +48,43 @@ internal static class ReceivingStageChecks
             Check((await service.GetMyBatchesAsync(outsider, "receiving")).Count == 0 && (await service.GetMyOverviewAsync(outsider)).TotalCount == 0, "overview and stage API respect staff membership");
             try { await service.GetMyBatchesAsync(staff.Id, "unknown"); throw new Exception("Invalid stage accepted"); }
             catch (ArgumentException) { Console.WriteLine("PASS: invalid stage rejected"); }
+
+            warehouse = await db.Warehouses.SingleAsync(x => x.Id == warehouse.Id);
+            var unassigned = new User { Id = Guid.NewGuid(), RoleId = roleId, Warehouse = warehouse, UserName = "no-batches", Email = "no-batches@example.test" };
+            var otherWarehouse = new Warehouse { Id = Guid.NewGuid(), WarehouseName = "Other warehouse" };
+            AreaGroup AddGroup(Warehouse owner, string type, bool active = true)
+            {
+                var area = new WarehouseArea { Id = Guid.NewGuid(), Warehouse = owner, AreaName = type, AreaType = type, IsActive = active };
+                var group = new AreaGroup { Id = Guid.NewGuid(), Area = area, GroupName = "Test aisle", CapacityKg = 20, CurrentKg = 5 };
+                group.StorageLocations.Add(new StorageLocation { Id = Guid.NewGuid(), Area = area, Warehouse = owner, LocationCode = Guid.NewGuid().ToString(), CapacityKg = 10, CurrentWeightKg = 5 });
+                db.Add(group);
+                return group;
+            }
+            var visible = AddGroup(warehouse, "Receiving");
+            AddGroup(otherWarehouse, "Receiving");
+            AddGroup(warehouse, "Storage");
+            AddGroup(warehouse, "Receiving", false);
+            var hiddenGroup = AddGroup(warehouse, "Receiving"); hiddenGroup.IsActive = false;
+            visible.StorageLocations.Add(new StorageLocation { Id = Guid.NewGuid(), Area = visible.Area, Warehouse = warehouse, LocationCode = "Inactive", IsActive = false });
+            db.Add(unassigned);
+            var stored = await db.IntakeBatches.FirstAsync(x => x.Status == "ReceivedAtWarehouse");
+            stored.CurrentStorageLocationId = visible.StorageLocations.First().Id;
+            await db.SaveChangesAsync();
+            db.ChangeTracker.Clear();
+            Check((await service.GetMyBatchesAsync(unassigned.Id)).Count == 0, "aisle test staff has no assigned batches");
+            var groups = await service.GetMyReceivingGroupsAsync(unassigned.Id);
+            Check(groups.Count == 1 && groups[0].Id == visible.Id && groups[0].Locations.Count == 1,
+                "staff without batches sees own active receiving aisles and locations only");
+            Check(groups[0].AvailableKg == 15 && groups[0].Locations[0].AvailableKg == 5 && groups[0].Locations[0].BatchCount == 1,
+                "aisle capacity and warehouse-wide batch count preserved");
+            var locationBatches = await service.GetLocationBatchesAsync(unassigned.Id, groups[0].Locations[0].Id);
+            Check(locationBatches.Count == 1 && !locationBatches[0].CanManage, "staff can view location occupancy without gaining management rights");
+            try { await service.GetMyReceivingGroupsAsync(staff.Id); throw new Exception("Staff without warehouse was accepted"); }
+            catch (InvalidOperationException) { Console.WriteLine("PASS: staff without warehouse receives explicit error"); }
+            var inactiveStaff = await db.Users.SingleAsync(x => x.Id == unassigned.Id);
+            inactiveStaff.IsActive = false; await db.SaveChangesAsync();
+            try { await service.GetMyReceivingGroupsAsync(unassigned.Id); throw new Exception("Inactive staff was accepted"); }
+            catch (InvalidOperationException) { Console.WriteLine("PASS: inactive staff cannot access receiving aisles"); }
         }
         finally { await db.Database.EnsureDeletedAsync(); }
     }

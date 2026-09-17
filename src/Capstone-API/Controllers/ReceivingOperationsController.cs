@@ -119,6 +119,11 @@ public class ReceivingOperationsController(IReceivingOperationsService service) 
     public async Task<IActionResult> LocationBatches(Guid locationId)
         => Ok(await service.GetLocationBatchesAsync(CurrentUserId, locationId));
 
+    [HttpGet("my-receiving-groups")]
+    [Authorize(Roles = "ReceivingStaff")]
+    public async Task<IActionResult> MyReceivingGroups()
+        => Ok(await service.GetMyReceivingGroupsAsync(CurrentUserId));
+
     [HttpGet("my-batches/{batchId:guid}")]
     [Authorize(Roles = "ReceivingStaff")]
     public async Task<IActionResult> MyBatch(Guid batchId)

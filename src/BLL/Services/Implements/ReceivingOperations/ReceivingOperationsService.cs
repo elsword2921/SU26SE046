@@ -1197,6 +1197,24 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
         return batches.Select(x => MapBatch(x, locationBatchCounts)).ToList();
     }
 
+    public async Task<List<ReceivingStagingGroupDto>> GetMyReceivingGroupsAsync(Guid staffId)
+    {
+        var warehouseId = await context.Users.AsNoTracking()
+            .Where(x => x.Id == staffId && x.IsActive != false
+                && x.Warehouse != null && x.Warehouse.IsActive != false)
+            .Select(x => x.WarehouseId).FirstOrDefaultAsync();
+        if (!warehouseId.HasValue)
+            throw new InvalidOperationException("Nhân viên chưa được phân công vào kho đang hoạt động.");
+
+        var areas = await context.WarehouseAreas.AsNoTracking().AsSplitQuery()
+            .Where(x => x.WarehouseId == warehouseId.Value && x.IsActive != false && x.AreaType == "Receiving")
+            .Include(x => x.Groups.Where(g => g.IsActive != false))
+                .ThenInclude(g => g.StorageLocations.Where(l => l.IsActive != false))
+            .ToListAsync();
+        var counts = await GetLocationBatchCountsAsync([warehouseId.Value]);
+        return MapReceivingGroups(areas, counts);
+    }
+
     public async Task<List<ReceivingLocationBatchDto>> GetLocationBatchesAsync(Guid staffId, Guid locationId)
     {
         var warehouseId = await context.Users.AsNoTracking()
@@ -1731,6 +1749,24 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
             .ToDictionaryAsync(x => x.Key, x => x.Count());
     }
 
+    private static List<ReceivingStagingGroupDto> MapReceivingGroups(
+        IEnumerable<WarehouseArea> areas, IReadOnlyDictionary<Guid, int> locationBatchCounts) =>
+        areas
+            .Where(x => x.IsActive != false && x.AreaType == "Receiving")
+            .SelectMany(x => x.Groups.Where(g => g.IsActive != false)
+                .Select(g => new ReceivingStagingGroupDto(g.Id, g.GroupName, x.AreaName,
+                    g.CapacityKg, g.CurrentKg, Math.Max(0, g.CapacityKg - g.CurrentKg),
+                    g.StorageLocations.Where(location => location.IsActive != false)
+                        .OrderBy(location => location.LocationCode)
+                        .Select(location => new ReceivingStagingLocationDto(
+                            location.Id, location.LocationCode, location.AisleCode,
+                            location.RackCode, location.ShelfCode, location.BinCode,
+                            location.CapacityKg, location.CurrentWeightKg,
+                            Math.Max(0, location.CapacityKg - location.CurrentWeightKg),
+                            location.Status,
+                            locationBatchCounts.GetValueOrDefault(location.Id))).ToList())))
+            .OrderBy(x => x.GroupName).ToList();
+
     private static ReceivingBatchDto MapBatch(IntakeBatch batch, IReadOnlyDictionary<Guid, int> locationBatchCounts) => new()
     {
         Id = batch.Id, Code = batch.BatchCode, Route = batch.RouteName, Date = batch.IntakeDate,
@@ -1749,21 +1785,7 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
         CurrentAreaName = batch.CurrentArea?.AreaName,
         CurrentGroupName = batch.CurrentAreaGroup?.GroupName,
         CurrentLocationCode = batch.CurrentStorageLocation?.LocationCode,
-        ReceivingGroups = batch.Warehouse?.Areas
-            .Where(x => x.IsActive != false && x.AreaType == "Receiving")
-            .SelectMany(x => x.Groups.Where(g => g.IsActive != false)
-                .Select(g => new ReceivingStagingGroupDto(g.Id, g.GroupName, x.AreaName,
-                    g.CapacityKg, g.CurrentKg, Math.Max(0, g.CapacityKg - g.CurrentKg),
-                    g.StorageLocations.Where(location => location.IsActive != false)
-                        .OrderBy(location => location.LocationCode)
-                        .Select(location => new ReceivingStagingLocationDto(
-                            location.Id, location.LocationCode, location.AisleCode,
-                            location.RackCode, location.ShelfCode, location.BinCode,
-                            location.CapacityKg, location.CurrentWeightKg,
-                            Math.Max(0, location.CapacityKg - location.CurrentWeightKg),
-                            location.Status,
-                            locationBatchCounts.GetValueOrDefault(location.Id))).ToList())))
-            .OrderBy(x => x.GroupName).ToList() ?? [],
+        ReceivingGroups = MapReceivingGroups(batch.Warehouse?.Areas ?? [], locationBatchCounts),
         TeamMembers = batch.ReceivingTeam?.Members.Where(x => x.IsActive != false)
             .Select(x => new ReceivingTeamMemberDto(x.StaffId, x.Staff.FullName, x.Staff.PhoneNumber)).ToList() ?? [],
         Requests = batch.PickupAssignments.OrderBy(x => x.RouteOrder).Select(x => new ReceivingRequestDto
