@@ -68,12 +68,8 @@ public class GeminiClassificationService(HttpClient httpClient, IConfiguration c
         };
 
         var model = configuration["Gemini:Model"] ?? "gemini-3.6-flash";
-        using var message = new HttpRequestMessage(HttpMethod.Post, $"v1beta/models/{model}:generateContent")
-        {
-            Content = new StringContent(payload.ToJsonString(), Encoding.UTF8, "application/json")
-        };
-        message.Headers.Add("x-goog-api-key", apiKey);
-        using var response = await httpClient.SendAsync(message, cancellationToken);
+        using var response = await GeminiRequest.SendAsync(httpClient, $"v1beta/models/{model}:generateContent",
+            apiKey, payload.ToJsonString(), cancellationToken);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         if (!response.IsSuccessStatusCode)
             throw new InvalidOperationException(ReadGeminiError(body));
