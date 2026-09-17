@@ -1321,7 +1321,7 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
 
     public async Task ConfirmPickupAsync(Guid staffId, Guid batchId, Guid requestId, ConfirmPickupDto dto)
     {
-        if (dto.ActualWeight <= 0) throw new InvalidOperationException("Actual weight must be greater than zero.");
+        ValidateReceivedWeight(dto.ActualWeight);
         var batch = await RequireMyBatch(staffId, batchId);
         if (batch.Status != "Receiving" || batch.ReceivingTeam?.Status != "InProgress"
             || batch.ReceivingTeam.Shift.Status != "InProgress")
@@ -1405,8 +1405,7 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
 
     public async Task ConfirmWarehouseDropOffAsync(Guid staffId, Guid requestId, ConfirmPickupDto dto)
     {
-        if (dto.ActualWeight <= 0)
-            throw new InvalidOperationException("Actual weight must be greater than zero.");
+        ValidateReceivedWeight(dto.ActualWeight);
         var request = await context.DonationRequests
             .FirstOrDefaultAsync(x => x.Id == requestId && x.IsActive != false
                 && x.DeliveryMethod == "DonorDropOff")
@@ -1641,6 +1640,12 @@ public class ReceivingOperationsService(AppDbContext context) : IReceivingOperat
                 staffId);
         await context.SaveChangesAsync();
         await transaction.CommitAsync();
+    }
+
+    private static void ValidateReceivedWeight(decimal weight)
+    {
+        if (weight <= 0 || weight > 50m || decimal.Round(weight, 2) != weight)
+            throw new InvalidOperationException("Khối lượng thực nhận phải lớn hơn 0 kg, tối đa 50 kg mỗi đơn và có tối đa 2 chữ số thập phân.");
     }
 
     public async Task SendToClassificationAsync(Guid staffId, Guid batchId)

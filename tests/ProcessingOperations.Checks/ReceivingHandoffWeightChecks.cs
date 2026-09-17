@@ -54,6 +54,34 @@ internal static class ReceivingHandoffWeightChecks
                         $"handoff accepts {weight} kg and releases receiving capacity");
                 }
             }
+            foreach (var invalidWeight in new[] { -1m, 0m, 50.01m, 100000m, 1.234m })
+            {
+                var dto = new BLL.DTOs.ConfirmPickupDto(invalidWeight, null, null);
+                foreach (var action in new Func<Task>[] {
+                    () => service.ConfirmPickupAsync(staff.Id, batch.Id, request.Id, dto),
+                    () => service.ConfirmWarehouseDropOffAsync(staff.Id, request.Id, dto) })
+                {
+                    try { await action(); throw new Exception("Invalid received weight accepted"); }
+                    catch (InvalidOperationException e) { Check(e.Message.Contains("50 kg"), $"receipt API rejects {invalidWeight} kg before processing"); }
+                }
+            }
+            batch.Status = "Receiving"; batch.TotalWeight = 0;
+            db.DonationPointRules.Add(new DonationPointRule { Id = Guid.NewGuid(), PointsPerKg = 1 });
+            team.Status = shift.Status = "InProgress";
+            var receiptRequests = new List<DonationRequest>();
+            foreach (var value in new[] { 0.01m, 50m })
+            {
+                var receiptRequest = new DonationRequest { Id = Guid.NewGuid(), Donor = staff, Warehouse = warehouse, RequestCode = $"RECEIPT-{value}", EstimateWeight = value };
+                db.Add(new PickupAssignment { Id = Guid.NewGuid(), IntakeBatch = batch, DonorRequest = receiptRequest, Team = team, Shift = shift, Status = "Pending" });
+                receiptRequests.Add(receiptRequest);
+            }
+            await db.SaveChangesAsync();
+            foreach (var receiptRequest in receiptRequests)
+            {
+                await service.ConfirmPickupAsync(staff.Id, batch.Id, receiptRequest.Id, new BLL.DTOs.ConfirmPickupDto(receiptRequest.EstimateWeight, "Verified receipt", null));
+                Check(receiptRequest.ActualWeight == receiptRequest.EstimateWeight, $"receipt accepts {receiptRequest.EstimateWeight} kg exactly");
+            }
+            Check(batch.TotalWeight == 50.01m, "50 kg limit applies per donation, not per intake batch");
         }
         finally { await db.Database.EnsureDeletedAsync(); }
     }
