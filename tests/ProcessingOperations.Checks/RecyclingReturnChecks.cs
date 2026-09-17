@@ -82,6 +82,16 @@ internal static class RecyclingReturnChecks
             await service.ConfirmReceiptAsync(classificationStaff.Id, intakeId);
             Check((await db.StorageLocations.SingleAsync(x => x.Id == recycledLocation.Id)).CurrentWeightKg == 0
                 && (await db.WarehouseAreas.SingleAsync(x => x.Id == recycledArea.Id)).CurrentKg == 0, "classification receipt releases recycled staging capacity");
+            foreach (var invalidWeight in new[] { 0m, -1m, 2.001m, 3m })
+            {
+                var countRejected = false;
+                try { await service.CountBatchAsync(classificationStaff.Id, intakeId, new() { ItemCount = 1, TotalWeightKg = invalidWeight }); }
+                catch (InvalidOperationException) { countRejected = true; }
+                Check(countRejected, $"classification rejects invalid counted weight {invalidWeight}");
+                var unchanged = await db.IntakeBatches.AsNoTracking().SingleAsync(x => x.Id == intakeId);
+                Check(unchanged.Status == "AwaitingClassificationCount" && unchanged.CountedTotalWeight == null,
+                    "invalid count does not update the batch");
+            }
             await service.CountBatchAsync(classificationStaff.Id, intakeId, new() { ItemCount = 1, TotalWeightKg = 2 });
             await service.StartBatchAsync(classificationStaff.Id, intakeId);
             Category Cat(string type, string code) => new() { Id = Guid.NewGuid(), Type = type, Code = code, Name = code };

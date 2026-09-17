@@ -126,6 +126,8 @@ public partial class ClassificationOperationsService(AppDbContext context) : ICl
             throw new InvalidOperationException("The counted item quantity must be greater than zero.");
         if (dto.TotalWeightKg <= 0)
             throw new InvalidOperationException("The counted total weight must be greater than zero.");
+        if (decimal.Round(dto.TotalWeightKg, 2) != dto.TotalWeightKg)
+            throw new InvalidOperationException("Khối lượng thực tế chỉ được có tối đa 2 chữ số thập phân.");
 
         var batch = await RequireBatch(batchId);
         await RequireActiveClassificationTeamAsync(staffId, batch);
