@@ -4,6 +4,11 @@ namespace BLL.Services.Interfaces.ReceivingOperations;
 
 public interface IReceivingOperationsService
 {
+    Task<ReceivingCapacityBoardDto> GetCapacityBoardAsync(Guid? warehouseId, DateTime? date);
+    Task SetWarehouseLimitsAsync(Guid id, ReceivingLimitsDto dto);
+    Task SetTeamLimitsAsync(Guid id, ReceivingLimitsDto? dto);
+    Task<ReceivingPlanPreviewDto> PreviewPlanAsync(Guid shiftId);
+    Task ApplyPlanAsync(ApplyReceivingPlanDto dto);
     Task GenerateStandardShiftsAsync(GenerateShiftsDto dto);
     Task<GenerateMonthShiftsResultDto> GenerateMonthShiftsAsync(GenerateMonthShiftsDto dto);
     Task<GenerateYearShiftsResultDto> GenerateYearShiftsAsync(GenerateYearShiftsDto dto);

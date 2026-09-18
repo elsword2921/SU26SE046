@@ -29,7 +29,7 @@ internal static class ReceivingHandoffWeightChecks
             db.Add(batch);
             await db.SaveChangesAsync();
             var service = new ReceivingOperationsService(db);
-            foreach (var weight in new[] { 0m, 9.99m, 10m, 10.01m })
+            foreach (var weight in new[] { -1m, 0m, 0.01m, 3m, 9.99m, 10m, 10.01m })
             {
                 batch.TotalWeight = weight;
                 batch.Status = "ReceivedAtWarehouse";
@@ -38,10 +38,10 @@ internal static class ReceivingHandoffWeightChecks
                 area.CurrentKg = group.CurrentKg = location.CurrentWeightKg = 100;
                 await db.SaveChangesAsync();
                 var notificationsBefore = await db.Notifications.CountAsync();
-                if (weight < 10)
+                if (weight <= 0)
                 {
                     try { await service.SendToClassificationAsync(staff.Id, batch.Id); throw new Exception("Underweight handoff accepted"); }
-                    catch (InvalidOperationException e) { Check(e.Message.Contains("10 kg"), $"handoff rejects {weight} kg with minimum-weight message"); }
+                    catch (InvalidOperationException e) { Check(e.Message.Contains("0 kg"), $"handoff rejects non-positive {weight} kg"); }
                     Check(batch.Status == "ReceivedAtWarehouse" && batch.CurrentStorageLocationId == location.Id
                         && batch.SentToClassificationAt == null && area.CurrentKg == 100 && group.CurrentKg == 100 && location.CurrentWeightKg == 100
                         && await db.Notifications.CountAsync() == notificationsBefore, "rejected handoff leaves status, location, capacity and notifications unchanged");
@@ -66,6 +66,8 @@ internal static class ReceivingHandoffWeightChecks
                 }
             }
             batch.Status = "Receiving"; batch.TotalWeight = 0;
+            // Actual receipt must stay truthful even above the planning limit.
+            team.MaxReceivingWeightKg = 1;
             db.DonationPointRules.Add(new DonationPointRule { Id = Guid.NewGuid(), PointsPerKg = 1 });
             team.Status = shift.Status = "InProgress";
             var receiptRequests = new List<DonationRequest>();

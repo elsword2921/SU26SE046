@@ -103,23 +103,24 @@ public class ReceivingRequestDto
 public record ReceivingTeamMemberDto(Guid Id, string FullName, string PhoneNumber);
 public record DispatchRequestDto(Guid Id, string Code, string ContactName, string PhoneNumber,
     string DeliveryMethod, string Address, DateTime? ScheduledDate, Guid WarehouseId, string WarehouseName,
-    DateTime? CreatedAt);
+    DateTime? CreatedAt, decimal EstimateWeight = 0);
 public record DispatchTeamDto(Guid Id, string TeamName, string TeamType, Guid ShiftId, string ShiftName,
     DateTime ShiftDate, string ShiftTime, TimeSpan StartTime, TimeSpan EndTime,
     Guid WarehouseId, List<ReceivingTeamMemberDto> Members);
-public record ReceivingDispatchBoardDto(List<DispatchRequestDto> Requests, List<DispatchTeamDto> Teams);
+public record ReceivingDispatchBoardDto(List<DispatchRequestDto> Requests, List<DispatchTeamDto> Teams,
+    List<ReceivingTeamLoadDto>? Loads = null);
 public record ManagerWarehouseOptionDto(Guid Id, string Name, string Address);
 public record ManagerStaffOptionDto(Guid Id, string FullName, string UserName, string PhoneNumber,
     Guid? WarehouseId);
 public record ManagerAssignedRequestDto(Guid Id, string Code, string ContactName, string PhoneNumber,
-    string Address, DateTime? PickupDate, string DeliveryMethod, string Status, int RouteOrder);
+    string Address, DateTime? PickupDate, string DeliveryMethod, string Status, int RouteOrder, decimal EstimateWeight = 0);
 public record ManagerTeamOverviewDto(Guid Id, string TeamName, string TeamType,
     string Status, DateTime? StartedAt, Guid? StartedByStaffId,
     DateTime? CompletedAt, Guid? CompletedByStaffId,
     List<ReceivingTeamMemberDto> Members,
     Guid? IntakeBatchId, string? IntakeBatchCode, string? IntakeBatchStatus,
     string? IntakeBatchRoute, decimal IntakeBatchWeight,
-    List<ManagerAssignedRequestDto> Requests);
+    List<ManagerAssignedRequestDto> Requests, ReceivingTeamLoadDto? Load = null);
 public record ManagerShiftOverviewDto(Guid Id, Guid WarehouseId, string WarehouseName, string ShiftName,
     DateTime ShiftDate, TimeSpan StartTime, TimeSpan EndTime, string Status,
     List<ManagerTeamOverviewDto> Teams, int AssignedRequests, int PendingDropOffRequests);

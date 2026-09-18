@@ -107,6 +107,9 @@ namespace DAL
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<Warehouse>().Property(x => x.MaxReceivingRequests).HasDefaultValue(8);
+            modelBuilder.Entity<Warehouse>().Property(x => x.MaxReceivingWeightKg).HasPrecision(18, 2).HasDefaultValue(80m);
+            modelBuilder.Entity<OperationalTeam>().Property(x => x.MaxReceivingWeightKg).HasPrecision(18, 2);
             modelBuilder.Entity<ClassificationScoringRule>(entity =>
             {
                 entity.Property(x => x.Id).ValueGeneratedNever();

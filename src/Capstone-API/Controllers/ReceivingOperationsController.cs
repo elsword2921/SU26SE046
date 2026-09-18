@@ -11,6 +11,34 @@ namespace Capstone_API.Controllers;
 [Authorize]
 public class ReceivingOperationsController(IReceivingOperationsService service) : ControllerBase
 {
+    [HttpGet("capacity")]
+    [Authorize(Roles = "Manager")]
+    public async Task<IActionResult> Capacity([FromQuery] Guid? warehouseId, [FromQuery] DateTime? date)
+        => Ok(await service.GetCapacityBoardAsync(warehouseId, date));
+
+    [HttpPut("warehouses/{id:guid}/receiving-limits")]
+    [Authorize(Roles = "Manager")]
+    public async Task<IActionResult> WarehouseLimits(Guid id, ReceivingLimitsDto dto)
+    { await service.SetWarehouseLimitsAsync(id, dto); return NoContent(); }
+
+    [HttpPut("teams/{id:guid}/receiving-limits")]
+    [Authorize(Roles = "Manager")]
+    public async Task<IActionResult> TeamLimits(Guid id, ReceivingLimitsDto dto)
+    { await service.SetTeamLimitsAsync(id, dto); return NoContent(); }
+
+    [HttpDelete("teams/{id:guid}/receiving-limits")]
+    [Authorize(Roles = "Manager")]
+    public async Task<IActionResult> ResetTeamLimits(Guid id)
+    { await service.SetTeamLimitsAsync(id, null); return NoContent(); }
+
+    [HttpGet("plan-preview/{shiftId:guid}")]
+    [Authorize(Roles = "Manager")]
+    public async Task<IActionResult> Preview(Guid shiftId) => Ok(await service.PreviewPlanAsync(shiftId));
+
+    [HttpPost("apply-plan")]
+    [Authorize(Roles = "Manager")]
+    public async Task<IActionResult> ApplyPlan(ApplyReceivingPlanDto dto)
+    { await service.ApplyPlanAsync(dto); return NoContent(); }
     [HttpPost("standard-shifts")]
     [Authorize(Roles = "Manager")]
     public async Task<IActionResult> GenerateShifts(GenerateShiftsDto dto)

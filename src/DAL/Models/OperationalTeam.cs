@@ -8,6 +8,8 @@ public class OperationalTeam : BaseEntity
     public string TeamType { get; set; } = string.Empty;
     public string TeamName { get; set; } = string.Empty;
     public string Status { get; set; } = "Scheduled";
+    public int? MaxReceivingRequests { get; set; }
+    public decimal? MaxReceivingWeightKg { get; set; }
     public DateTime? StartedAt { get; set; }
     public Guid? StartedByStaffId { get; set; }
     public DateTime? CompletedAt { get; set; }

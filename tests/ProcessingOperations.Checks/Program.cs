@@ -13,6 +13,7 @@ WeightedScoringChecks.Run();
 await DonorRoutingChecks.Run();
 await ReceivingStageChecks.Run();
 await ReceivingHandoffWeightChecks.Run();
+await ReceivingCapacityChecks.Run();
 var options = new DbContextOptionsBuilder<AppDbContext>()
     .UseSqlServer($"Server=(localdb)\\MSSQLLocalDB;Database={database};Integrated Security=true;TrustServerCertificate=true").Options;
 AppDbContext Db() => new(options);

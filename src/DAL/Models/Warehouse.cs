@@ -15,6 +15,8 @@ namespace DAL.Models
         public double? Latitude { get; set; }
         public double? Longitude { get; set; }
         public double ServiceRadiusKm { get; set; } = 24;
+        public int MaxReceivingRequests { get; set; } = 8;
+        public decimal MaxReceivingWeightKg { get; set; } = 80;
 
         // Navigation
         public virtual ICollection<User> Users { get; set; }
