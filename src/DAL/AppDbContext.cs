@@ -107,6 +107,28 @@ namespace DAL
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<FundContribution>(e =>
+            {
+                e.Property(x => x.OrderCode).UseIdentityColumn(20260922000000L);
+                e.HasIndex(x => x.OrderCode).IsUnique();
+                e.HasIndex(x => new { x.UserId, x.RequestKey }).IsUnique();
+                e.HasIndex(x => x.PaymentLinkId).IsUnique().HasFilter("[PaymentLinkId] IS NOT NULL");
+                e.Property(x => x.Amount).HasPrecision(18, 2); // Whole VND enforced by the fund service.
+                e.Property(x => x.Status).HasMaxLength(30);
+                e.Property(x => x.PaymentLinkId).HasMaxLength(100);
+                e.Property(x => x.CheckoutUrl).HasMaxLength(1000);
+                e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+            });
+            modelBuilder.Entity<FundExpense>(e =>
+            {
+                e.HasIndex(x => new { x.ManagerId, x.RequestKey }).IsUnique();
+                e.Property(x => x.Amount).HasPrecision(18, 2);
+                e.Property(x => x.Title).HasMaxLength(160);
+                e.Property(x => x.Description).HasMaxLength(2000);
+                e.Property(x => x.VoidReason).HasMaxLength(1000);
+                e.Property(x => x.ReceiptContentType).HasMaxLength(50);
+                e.HasOne(x => x.Manager).WithMany().HasForeignKey(x => x.ManagerId).OnDelete(DeleteBehavior.Restrict);
+            });
             modelBuilder.Entity<Warehouse>().Property(x => x.MaxReceivingRequests).HasDefaultValue(8);
             modelBuilder.Entity<Warehouse>().Property(x => x.MaxReceivingWeightKg).HasPrecision(18, 2).HasDefaultValue(80m);
             modelBuilder.Entity<OperationalTeam>().Property(x => x.MaxReceivingWeightKg).HasPrecision(18, 2);

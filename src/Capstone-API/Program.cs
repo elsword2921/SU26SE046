@@ -75,6 +75,8 @@ builder.Services.AddScoped<IWarehouseOperationsService, WarehouseOperationsServi
 builder.Services.AddScoped<IManagerDashboardService, ManagerDashboardService>();
 builder.Services.AddScoped<IManagerAccountService, ManagerAccountService>();
 builder.Services.AddScoped<IVoucherService, VoucherService>();
+builder.Services.AddScoped<BLL.Services.Implements.OperatingFund.OperatingFundService>();
+builder.Services.AddHttpClient<BLL.Services.Implements.OperatingFund.IPayOsGateway, BLL.Services.Implements.OperatingFund.PayOsGateway>(client => client.Timeout = TimeSpan.FromSeconds(15));
 builder.Services.AddHttpClient<DistributionOperationsService>(client =>
 {
     var endpoint = (builder.Configuration["Ghn:Endpoint"] ?? builder.Configuration["GHN:Endpoint"]
