@@ -511,8 +511,11 @@ public partial class ClassificationOperationsService(AppDbContext context) : ICl
             item.Status = "AssignedToClassifiedBatch";
             item.UpdateAt = DateTime.UtcNow;
             item.UpdatedBy = staffId;
-            await LinkBatchProvenanceAsync(batch.Id, item.BatchId, staffId);
         }
+        // Provenance belongs to an intake source, not to each item. Repeating
+        // this before SaveChanges tracks duplicate entities with the same key.
+        foreach (var intakeBatchId in items.Select(x => x.BatchId).Distinct())
+            await LinkBatchProvenanceAsync(batch.Id, intakeBatchId, staffId);
         batch.TotalItem = await context.ClassifiedItems.CountAsync(x => x.ClassifiedBatchId == batch.Id
             && x.IsActive != false) + items.Count;
         batch.UpdateAt = DateTime.UtcNow;
@@ -1121,13 +1124,19 @@ public partial class ClassificationOperationsService(AppDbContext context) : ICl
             .ToListAsync();
         if (requestIds.Count == 0) return;
 
-        var existingIds = await context.ClassifiedBatchDonationRequests.AsNoTracking()
+        var existing = await context.ClassifiedBatchDonationRequests
             .Where(x => x.ClassifiedBatchId == classifiedBatchId
                 && x.IntakeBatchId == intakeBatchId
                 && requestIds.Contains(x.DonationRequestId))
-            .Select(x => x.DonationRequestId)
             .ToListAsync();
         var now = DateTime.UtcNow;
+        foreach (var source in existing.Where(x => x.IsActive == false))
+        {
+            source.IsActive = true;
+            source.UpdateAt = now;
+            source.UpdatedBy = staffId;
+        }
+        var existingIds = existing.Select(x => x.DonationRequestId).ToHashSet();
         context.ClassifiedBatchDonationRequests.AddRange(requestIds
             .Where(id => !existingIds.Contains(id))
             .Select(id => new ClassifiedBatchDonationRequest
