@@ -27,6 +27,7 @@ var proof = Encoding.ASCII.GetBytes("%PDF-1.7\nTest receipt only\n%%EOF");
 CreateFundExpense Expense(decimal amount) => new(Guid.NewGuid(), amount, "Transport", "Clothes pickup transport", DateOnly.FromDateTime(DateTime.UtcNow));
 try {
     await GatewayContractChecks.Run(Check);
+    await StatementChecks.Run(Check);
     await using (var db = Db()) { await db.Database.EnsureCreatedAsync(); db.AddRange(donor, org, manager, staff, pending); await db.SaveChangesAsync(); }
     Check((await Run(s=>s.Summary(donor.Id))).Balance == 0, "empty fund");
     await Denied(s=>s.Summary(staff.Id), "staff denied");

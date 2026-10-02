@@ -107,6 +107,19 @@ namespace DAL
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<FundStatement>(e =>
+            {
+                e.HasIndex(x => x.Period).IsUnique();
+                e.HasIndex(x => new { x.ManagerId, x.RequestKey }).IsUnique();
+                e.Property(x => x.Note).HasMaxLength(2000);
+                e.Property(x => x.ContentType).HasMaxLength(50);
+                e.HasOne(x => x.Manager).WithMany().HasForeignKey(x => x.ManagerId).OnDelete(DeleteBehavior.Restrict);
+            });
+            modelBuilder.Entity<FundStatementReminder>(e =>
+            {
+                e.HasKey(x => new { x.Period, x.ManagerId });
+                e.HasOne(x => x.Manager).WithMany().HasForeignKey(x => x.ManagerId).OnDelete(DeleteBehavior.Restrict);
+            });
             modelBuilder.Entity<FundContribution>(e =>
             {
                 e.Property(x => x.OrderCode).UseIdentityColumn(20260922000000L);
