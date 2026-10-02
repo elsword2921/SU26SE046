@@ -8,10 +8,11 @@ using Microsoft.EntityFrameworkCore;
 namespace Capstone_API.Controllers;
 
 [Route("api/warehouses")]
-public class WarehouseController(ICrudService<Warehouse> service) : CrudControllerBase<Warehouse>(service)
+public class WarehouseController(ICrudService<Warehouse> service, AppDbContext context) : CrudControllerBase<Warehouse>(service)
 {
     [AllowAnonymous]
-    public override Task<ActionResult<List<Warehouse>>> GetAll() => base.GetAll();
+    public override async Task<ActionResult<List<Warehouse>>> GetAll() =>
+        Ok(await BLL.Services.Implements.WarehouseOperations.WarehouseCollectionPoints.ListAsync(context));
 }
 
 [Route("api/categories")]
