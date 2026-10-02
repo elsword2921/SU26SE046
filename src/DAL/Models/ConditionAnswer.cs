@@ -8,5 +8,6 @@ public class ConditionAnswer : BaseEntity
     public string AnswerText { get; set; } = string.Empty;
     public int ConditionRating { get; set; }
     public virtual ConditionQuestion ConditionQuestion { get; set; } = null!;
-    public virtual ICollection<InspectionAnswer> InspectionAnswers { get; set; } = new List<InspectionAnswer>();
+    public virtual ICollection<InspectionAnswer> InspectionAnswers { get; set; } =
+        new List<InspectionAnswer>();
 }

@@ -117,8 +117,11 @@ namespace BLL.DTOs
         public DateTime OccurredAt { get; set; }
     }
 
-    public record DonationPointSummaryDto(int DonationPoint, int PointsPerKg,
-        List<DonationPointTransactionDto> Transactions);
+    public record DonationPointSummaryDto(
+        int DonationPoint,
+        int PointsPerKg,
+        List<DonationPointTransactionDto> Transactions
+    );
 
     public record DonorLeaderboardEntryDto(
         int Rank,
@@ -127,5 +130,6 @@ namespace BLL.DTOs
         string UserName,
         string? AvatarUrl,
         decimal TotalWeightKg,
-        int DonationCount);
+        int DonationCount
+    );
 }

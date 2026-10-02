@@ -15,6 +15,7 @@ namespace DAL.Models
         public DateTime PerformedAt { get; set; }
         public virtual Warehouse Warehouse { get; set; } = null!;
         public virtual User PerformedByStaff { get; set; } = null!;
-        public virtual ICollection<TransactionItem> Items { get; set; } = new List<TransactionItem>();
+        public virtual ICollection<TransactionItem> Items { get; set; } =
+            new List<TransactionItem>();
     }
 }

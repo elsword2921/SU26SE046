@@ -10,19 +10,30 @@ namespace BLL.Services.Implements.AuthService;
 
 public class EmailVerificationSender(
     IConfiguration configuration,
-    ILogger<EmailVerificationSender> logger) : IEmailVerificationSender
+    ILogger<EmailVerificationSender> logger
+) : IEmailVerificationSender
 {
     public async Task SendOrganizationApprovedAsync(string email, string recipientName)
     {
-        if (!bool.TryParse(configuration["Notifications:Email:Enabled"], out var enabled) || !enabled)
+        if (
+            !bool.TryParse(configuration["Notifications:Email:Enabled"], out var enabled)
+            || !enabled
+        )
             throw new InvalidOperationException("Chưa bật dịch vụ email thông báo phê duyệt.");
         using var client = CreateClient();
         using var message = new MailMessage
         {
-            From = new MailAddress(configuration["Notifications:Email:From"]!, "ReThreads", Encoding.UTF8),
+            From = new MailAddress(
+                configuration["Notifications:Email:From"]!,
+                "ReThreads",
+                Encoding.UTF8
+            ),
             Subject = "ReThreads - Tài khoản tổ chức đã được phê duyệt",
-            SubjectEncoding = Encoding.UTF8, BodyEncoding = Encoding.UTF8, IsBodyHtml = true,
-            Body = $"<div style='font-family:Arial,sans-serif;line-height:1.6;max-width:560px;margin:auto;padding:28px'><h2 style='color:#087d5e'>Tài khoản đã được phê duyệt</h2><p>Xin chào {WebUtility.HtmlEncode(recipientName)},</p><p>Manager đã phê duyệt tài khoản tổ chức của bạn trên ReThreads. Bạn có thể đăng nhập bằng tài khoản đã đăng ký để sử dụng hệ thống.</p><p>Cảm ơn bạn đã đồng hành cùng ReThreads.</p></div>"
+            SubjectEncoding = Encoding.UTF8,
+            BodyEncoding = Encoding.UTF8,
+            IsBodyHtml = true,
+            Body =
+                $"<div style='font-family:Arial,sans-serif;line-height:1.6;max-width:560px;margin:auto;padding:28px'><h2 style='color:#087d5e'>Tài khoản đã được phê duyệt</h2><p>Xin chào {WebUtility.HtmlEncode(recipientName)},</p><p>Manager đã phê duyệt tài khoản tổ chức của bạn trên ReThreads. Bạn có thể đăng nhập bằng tài khoản đã đăng ký để sử dụng hệ thống.</p><p>Cảm ơn bạn đã đồng hành cùng ReThreads.</p></div>",
         };
         message.To.Add(email);
         await client.SendMailAsync(message);
@@ -30,7 +41,10 @@ public class EmailVerificationSender(
 
     public async Task SendPasswordResetAsync(string email, string recipientName, string code)
     {
-        if (!bool.TryParse(configuration["Notifications:Email:Enabled"], out var enabled) || !enabled)
+        if (
+            !bool.TryParse(configuration["Notifications:Email:Enabled"], out var enabled)
+            || !enabled
+        )
         {
             logger.LogWarning("DEV PASSWORD RESET OTP for {Email}: {Code}", email, code);
             return;
@@ -41,7 +55,11 @@ public class EmailVerificationSender(
         var safeCode = WebUtility.HtmlEncode(code);
         using var message = new MailMessage
         {
-            From = new MailAddress(configuration["Notifications:Email:From"]!, "ReThreads", Encoding.UTF8),
+            From = new MailAddress(
+                configuration["Notifications:Email:From"]!,
+                "ReThreads",
+                Encoding.UTF8
+            ),
             Subject = "ReThreads - Đặt lại mật khẩu",
             SubjectEncoding = Encoding.UTF8,
             BodyEncoding = Encoding.UTF8,
@@ -54,25 +72,32 @@ public class EmailVerificationSender(
                   <div style="margin:24px 0;padding:20px;text-align:center;background:#f0fcf8;border:1px dashed #13b987;border-radius:14px;font-size:36px;font-weight:800;letter-spacing:8px;color:#087d5e">{safeCode}</div>
                   <p>Nếu bạn không yêu cầu đặt lại mật khẩu, hãy bỏ qua email này và không chia sẻ mã cho bất kỳ ai.</p>
                 </div>
-                """
+                """,
         };
         message.To.Add(email);
         await client.SendMailAsync(message);
     }
 
-    private SmtpClient CreateClient() => new(
-        configuration["Notifications:Email:Host"],
-        int.TryParse(configuration["Notifications:Email:Port"], out var port) ? port : 587)
-    {
-        EnableSsl = bool.TryParse(configuration["Notifications:Email:UseSsl"], out var ssl) && ssl,
-        Credentials = new NetworkCredential(
-            configuration["Notifications:Email:Username"],
-            configuration["Notifications:Email:Password"])
-    };
+    private SmtpClient CreateClient() =>
+        new(
+            configuration["Notifications:Email:Host"],
+            int.TryParse(configuration["Notifications:Email:Port"], out var port) ? port : 587
+        )
+        {
+            EnableSsl =
+                bool.TryParse(configuration["Notifications:Email:UseSsl"], out var ssl) && ssl,
+            Credentials = new NetworkCredential(
+                configuration["Notifications:Email:Username"],
+                configuration["Notifications:Email:Password"]
+            ),
+        };
 
     public async Task SendAsync(string email, string recipientName, string code)
     {
-        if (!bool.TryParse(configuration["Notifications:Email:Enabled"], out var enabled) || !enabled)
+        if (
+            !bool.TryParse(configuration["Notifications:Email:Enabled"], out var enabled)
+            || !enabled
+        )
         {
             logger.LogWarning("DEV EMAIL OTP for {Email}: {Code}", email, code);
             return;
@@ -80,12 +105,15 @@ public class EmailVerificationSender(
 
         using var client = new SmtpClient(
             configuration["Notifications:Email:Host"],
-            int.TryParse(configuration["Notifications:Email:Port"], out var port) ? port : 587)
+            int.TryParse(configuration["Notifications:Email:Port"], out var port) ? port : 587
+        )
         {
-            EnableSsl = bool.TryParse(configuration["Notifications:Email:UseSsl"], out var ssl) && ssl,
+            EnableSsl =
+                bool.TryParse(configuration["Notifications:Email:UseSsl"], out var ssl) && ssl,
             Credentials = new NetworkCredential(
                 configuration["Notifications:Email:Username"],
-                configuration["Notifications:Email:Password"])
+                configuration["Notifications:Email:Password"]
+            ),
         };
 
         var safeRecipientName = WebUtility.HtmlEncode(recipientName);
@@ -124,17 +152,30 @@ public class EmailVerificationSender(
 
         using var message = new MailMessage
         {
-            From = new MailAddress(configuration["Notifications:Email:From"]!, "ReThreads", Encoding.UTF8),
+            From = new MailAddress(
+                configuration["Notifications:Email:From"]!,
+                "ReThreads",
+                Encoding.UTF8
+            ),
             Subject = "ReThreads - Xác nhận địa chỉ email",
             SubjectEncoding = Encoding.UTF8,
             BodyEncoding = Encoding.UTF8,
-            IsBodyHtml = true
+            IsBodyHtml = true,
         };
-        message.AlternateViews.Add(AlternateView.CreateAlternateViewFromString(
-            $"Xin chào {recipientName},\n\nMã xác nhận email ReThreads của bạn là: {code}\nMã có hiệu lực trong 5 phút.\n\nKhông chia sẻ mã này với bất kỳ ai.\n\nReThreads",
-            Encoding.UTF8, MediaTypeNames.Text.Plain));
-        message.AlternateViews.Add(AlternateView.CreateAlternateViewFromString(
-            htmlBody, Encoding.UTF8, MediaTypeNames.Text.Html));
+        message.AlternateViews.Add(
+            AlternateView.CreateAlternateViewFromString(
+                $"Xin chào {recipientName},\n\nMã xác nhận email ReThreads của bạn là: {code}\nMã có hiệu lực trong 5 phút.\n\nKhông chia sẻ mã này với bất kỳ ai.\n\nReThreads",
+                Encoding.UTF8,
+                MediaTypeNames.Text.Plain
+            )
+        );
+        message.AlternateViews.Add(
+            AlternateView.CreateAlternateViewFromString(
+                htmlBody,
+                Encoding.UTF8,
+                MediaTypeNames.Text.Html
+            )
+        );
         message.To.Add(email);
         await client.SendMailAsync(message);
     }

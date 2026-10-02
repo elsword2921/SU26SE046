@@ -29,7 +29,4 @@ public record ForgotPasswordResponse(string Message);
 
 public record ResetPasswordResponse(string Message);
 
-public record VerificationResponse(
-    bool EmailConfirmed,
-    bool AccountActivated,
-    string Message);
+public record VerificationResponse(bool EmailConfirmed, bool AccountActivated, string Message);

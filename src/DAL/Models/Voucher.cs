@@ -15,12 +15,12 @@ namespace DAL.Models
         public int RequiredPoints { get; set; }
         public DateTime StartDate { get; set; }
         public DateTime ExpireDate { get; set; }
-        public VoucherStatus Status { get; set; }
-            = VoucherStatus.Active;
+        public VoucherStatus Status { get; set; } = VoucherStatus.Active;
+
         // Navigation
-        public virtual ICollection<VoucherCode> VoucherCodes { get; set; }
-            = new List<VoucherCode>();
-        public virtual ICollection<VoucherRedemption> VoucherRedemptions { get; set; }
-            = new List<VoucherRedemption>();
+        public virtual ICollection<VoucherCode> VoucherCodes { get; set; } =
+            new List<VoucherCode>();
+        public virtual ICollection<VoucherRedemption> VoucherRedemptions { get; set; } =
+            new List<VoucherRedemption>();
     }
 }

@@ -42,6 +42,7 @@ namespace DAL.Models
         public decimal TotalWeight { get; set; }
         public string Status { get; set; } = string.Empty;
         public string? Note { get; set; }
+
         // Navigation
         public virtual Warehouse Warehouse { get; set; } = null!;
         public virtual Shift Shift { get; set; } = null!;
@@ -57,13 +58,13 @@ namespace DAL.Models
         public virtual User? ClassificationStartedByStaff { get; set; }
         public virtual User? ClassificationCompletedByStaff { get; set; }
         public virtual User? ClassifiedAreaPlacedByStaff { get; set; }
-        public virtual ICollection<IntakeBatchDonationRequest> IntakeBatchDonationRequests { get; set; }
-            = new List<IntakeBatchDonationRequest>();
-        public virtual ICollection<ClassifiedBatchDonationRequest> ClassifiedBatchSources { get; set; }
-            = new List<ClassifiedBatchDonationRequest>();
-        public virtual ICollection<ClassifiedItem> ClassifiedItems { get; set; }
-            = new List<ClassifiedItem>();
-        public virtual ICollection<PickupAssignment> PickupAssignments { get; set; }
-            = new List<PickupAssignment>();
+        public virtual ICollection<IntakeBatchDonationRequest> IntakeBatchDonationRequests { get; set; } =
+            new List<IntakeBatchDonationRequest>();
+        public virtual ICollection<ClassifiedBatchDonationRequest> ClassifiedBatchSources { get; set; } =
+            new List<ClassifiedBatchDonationRequest>();
+        public virtual ICollection<ClassifiedItem> ClassifiedItems { get; set; } =
+            new List<ClassifiedItem>();
+        public virtual ICollection<PickupAssignment> PickupAssignments { get; set; } =
+            new List<PickupAssignment>();
     }
 }

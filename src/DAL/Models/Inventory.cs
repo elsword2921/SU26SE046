@@ -35,6 +35,7 @@ namespace DAL.Models
         public virtual AreaGroup? AreaGroup { get; set; }
         public virtual StorageLocation? StorageLocation { get; set; }
         public virtual ClassifiedBatch? ClassifiedBatch { get; set; }
-        public virtual ICollection<TransactionItem> TransactionItems { get; set; } = new List<TransactionItem>();
+        public virtual ICollection<TransactionItem> TransactionItems { get; set; } =
+            new List<TransactionItem>();
     }
 }

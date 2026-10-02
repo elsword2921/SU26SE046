@@ -56,6 +56,6 @@ public class ClassifiedBatch : BaseEntity
     public virtual User? WarehouseReceivedByStaff { get; set; }
     public virtual User? StoredByStaff { get; set; }
     public virtual ICollection<ClassifiedItem> Items { get; set; } = new List<ClassifiedItem>();
-    public virtual ICollection<ClassifiedBatchDonationRequest> DonationRequestSources { get; set; }
-        = new List<ClassifiedBatchDonationRequest>();
+    public virtual ICollection<ClassifiedBatchDonationRequest> DonationRequestSources { get; set; } =
+        new List<ClassifiedBatchDonationRequest>();
 }

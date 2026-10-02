@@ -13,9 +13,8 @@ public class ProcessingOperationOutput : BaseEntity
     public Guid? RecordedByStaffId { get; set; }
     public DateTime? RecordedAt { get; set; }
     public string? Notes { get; set; }
-    public virtual ProcessingOperation ProcessingOperation { get; set; }
-        = null!;
+    public virtual ProcessingOperation ProcessingOperation { get; set; } = null!;
     public virtual User? RecordedByStaff { get; set; }
-    public virtual ICollection<ClassifiedBatch> ClassifiedBatches { get; set; }
-        = new List<ClassifiedBatch>();
+    public virtual ICollection<ClassifiedBatch> ClassifiedBatches { get; set; } =
+        new List<ClassifiedBatch>();
 }

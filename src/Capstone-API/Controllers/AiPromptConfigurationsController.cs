@@ -20,31 +20,63 @@ public class AiPromptConfigurationsController(AppDbContext context) : Controller
     [HttpGet("classification")]
     public async Task<IActionResult> GetClassificationPrompt()
     {
-        var value = await context.AiPromptConfigurations.AsNoTracking()
+        var value = await context
+            .AiPromptConfigurations.AsNoTracking()
             .FirstOrDefaultAsync(x => x.Feature == ClassificationFeature && x.IsActive != false);
-        return Ok(value is null
-            ? new AiPromptConfigurationDto(null, ClassificationFeature, "Prompt phân loại mặc định", DefaultClassificationPrompt, true, true, null)
-            : new AiPromptConfigurationDto(value.Id, value.Feature, value.Name, value.PromptText,
-                value.Enabled, false, value.UpdateAt ?? value.CreateAt));
+        return Ok(
+            value is null
+                ? new AiPromptConfigurationDto(
+                    null,
+                    ClassificationFeature,
+                    "Prompt phân loại mặc định",
+                    DefaultClassificationPrompt,
+                    true,
+                    true,
+                    null
+                )
+                : new AiPromptConfigurationDto(
+                    value.Id,
+                    value.Feature,
+                    value.Name,
+                    value.PromptText,
+                    value.Enabled,
+                    false,
+                    value.UpdateAt ?? value.CreateAt
+                )
+        );
     }
 
     [HttpPut("classification")]
     public async Task<IActionResult> SaveClassificationPrompt(SaveAiPromptConfigurationDto dto)
     {
-        if (string.IsNullOrWhiteSpace(dto.Name)) throw new InvalidOperationException("Prompt name is required.");
-        if (string.IsNullOrWhiteSpace(dto.PromptText)) throw new InvalidOperationException("Prompt content is required.");
-        if (dto.PromptText.Length > 12000) throw new InvalidOperationException("Prompt cannot exceed 12,000 characters.");
+        if (string.IsNullOrWhiteSpace(dto.Name))
+            throw new InvalidOperationException("Prompt name is required.");
+        if (string.IsNullOrWhiteSpace(dto.PromptText))
+            throw new InvalidOperationException("Prompt content is required.");
+        if (dto.PromptText.Length > 12000)
+            throw new InvalidOperationException("Prompt cannot exceed 12,000 characters.");
         var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        var value = await context.AiPromptConfigurations
-            .FirstOrDefaultAsync(x => x.Feature == ClassificationFeature);
+        var value = await context.AiPromptConfigurations.FirstOrDefaultAsync(x =>
+            x.Feature == ClassificationFeature
+        );
         if (value is null)
         {
-            value = new AiPromptConfiguration { Id = Guid.NewGuid(), Feature = ClassificationFeature,
-                CreateAt = DateTime.UtcNow, CreatedBy = userId, IsActive = true };
+            value = new AiPromptConfiguration
+            {
+                Id = Guid.NewGuid(),
+                Feature = ClassificationFeature,
+                CreateAt = DateTime.UtcNow,
+                CreatedBy = userId,
+                IsActive = true,
+            };
             context.AiPromptConfigurations.Add(value);
         }
-        value.Name = dto.Name.Trim(); value.PromptText = dto.PromptText.Trim(); value.Enabled = dto.Enabled;
-        value.IsActive = true; value.UpdateAt = DateTime.UtcNow; value.UpdatedBy = userId;
+        value.Name = dto.Name.Trim();
+        value.PromptText = dto.PromptText.Trim();
+        value.Enabled = dto.Enabled;
+        value.IsActive = true;
+        value.UpdateAt = DateTime.UtcNow;
+        value.UpdatedBy = userId;
         await context.SaveChangesAsync();
         return NoContent();
     }
@@ -52,9 +84,11 @@ public class AiPromptConfigurationsController(AppDbContext context) : Controller
     [HttpDelete("classification")]
     public async Task<IActionResult> ResetClassificationPrompt()
     {
-        var value = await context.AiPromptConfigurations
-            .FirstOrDefaultAsync(x => x.Feature == ClassificationFeature);
-        if (value is not null) context.AiPromptConfigurations.Remove(value);
+        var value = await context.AiPromptConfigurations.FirstOrDefaultAsync(x =>
+            x.Feature == ClassificationFeature
+        );
+        if (value is not null)
+            context.AiPromptConfigurations.Remove(value);
         await context.SaveChangesAsync();
         return NoContent();
     }

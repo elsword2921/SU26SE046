@@ -1,33 +1,82 @@
 namespace BLL.DTOs;
 
-public record CurrentClassificationTeamDto(Guid Id, string TeamName, string Status,
-    DateTime ShiftDate, TimeSpan StartTime, TimeSpan EndTime);
+public record CurrentClassificationTeamDto(
+    Guid Id,
+    string TeamName,
+    string Status,
+    DateTime ShiftDate,
+    TimeSpan StartTime,
+    TimeSpan EndTime
+);
+
 public record ResumeClassificationBatchDto(Guid TeamId);
 
-public record ClassificationBatchSummaryDto(Guid Id, string BatchCode, string RouteName,
-    DateTime IntakeDate, decimal TotalWeight, string Status, int DonationRequests, int ClassifiedItems,
-    int? CountedItemCount, decimal? CountedTotalWeight, DateTime? CountedAt,
-    string? ClassificationAreaName, DateTime? ClassifiedAreaPlacedAt,
-    Guid? ClassificationTeamId = null, string? ClassificationTeamName = null,
-    string? TeamStatus = null, string? CurrentAreaName = null,
-    DateTime? TeamShiftDate = null, TimeSpan? TeamShiftStartTime = null,
-    TimeSpan? TeamShiftEndTime = null);
+public record ClassificationBatchSummaryDto(
+    Guid Id,
+    string BatchCode,
+    string RouteName,
+    DateTime IntakeDate,
+    decimal TotalWeight,
+    string Status,
+    int DonationRequests,
+    int ClassifiedItems,
+    int? CountedItemCount,
+    decimal? CountedTotalWeight,
+    DateTime? CountedAt,
+    string? ClassificationAreaName,
+    DateTime? ClassifiedAreaPlacedAt,
+    Guid? ClassificationTeamId = null,
+    string? ClassificationTeamName = null,
+    string? TeamStatus = null,
+    string? CurrentAreaName = null,
+    DateTime? TeamShiftDate = null,
+    TimeSpan? TeamShiftStartTime = null,
+    TimeSpan? TeamShiftEndTime = null
+);
 
-public record ClassificationItemDto(Guid Id, string ItemCode, string FabricType, string GarmentGroup,
-    string ClothingType, string Gender, string TargetUser, string Size, string ConditionGrade,
-    string ProcessingDirection, IReadOnlyList<string> ImageUrls, string? Notes, DateTime ClassifiedAt,
-    Guid? FabricTypeId, Guid? GarmentGroupId, Guid? ClothingTypeId, Guid? GenderId,
-    Guid? TargetUserId, Guid? SizeId, IReadOnlyList<ClassificationAnswerDto> Answers)
+public record ClassificationItemDto(
+    Guid Id,
+    string ItemCode,
+    string FabricType,
+    string GarmentGroup,
+    string ClothingType,
+    string Gender,
+    string TargetUser,
+    string Size,
+    string ConditionGrade,
+    string ProcessingDirection,
+    IReadOnlyList<string> ImageUrls,
+    string? Notes,
+    DateTime ClassifiedAt,
+    Guid? FabricTypeId,
+    Guid? GarmentGroupId,
+    Guid? ClothingTypeId,
+    Guid? GenderId,
+    Guid? TargetUserId,
+    Guid? SizeId,
+    IReadOnlyList<ClassificationAnswerDto> Answers
+)
 {
     public decimal? WeightedScore { get; init; }
     public string? ScoringSnapshot { get; init; }
 }
 
-public record ClassificationBatchDetailDto(Guid Id, string BatchCode, string RouteName,
-    DateTime IntakeDate, decimal TotalWeight, string Status, int DonationRequests,
-    int? CountedItemCount, decimal? CountedTotalWeight, string? CountingNotes, DateTime? CountedAt,
-    string? ClassificationAreaName, DateTime? ClassifiedAreaPlacedAt,
-    IReadOnlyList<ClassificationItemDto> Items);
+public record ClassificationBatchDetailDto(
+    Guid Id,
+    string BatchCode,
+    string RouteName,
+    DateTime IntakeDate,
+    decimal TotalWeight,
+    string Status,
+    int DonationRequests,
+    int? CountedItemCount,
+    decimal? CountedTotalWeight,
+    string? CountingNotes,
+    DateTime? CountedAt,
+    string? ClassificationAreaName,
+    DateTime? ClassifiedAreaPlacedAt,
+    IReadOnlyList<ClassificationItemDto> Items
+);
 
 public class CountClassificationBatchDto
 {
@@ -52,14 +101,27 @@ public class ClassifyItemDto
 }
 
 public record ClassificationOptionDto(Guid Id, string Text, string Grade);
-public record ClassificationQuestionDto(Guid Id, string Text, int DisplayOrder,
-    IReadOnlyList<ClassificationOptionDto> Options, decimal Weight = 1);
+
+public record ClassificationQuestionDto(
+    Guid Id,
+    string Text,
+    int DisplayOrder,
+    IReadOnlyList<ClassificationOptionDto> Options,
+    decimal Weight = 1
+);
+
 public record CategoryOptionDto(Guid Id, string Code, string Name, Guid? ParentId, int SortOrder);
-public record ClassificationCatalogDto(IReadOnlyList<CategoryOptionDto> FabricTypes,
-    IReadOnlyList<CategoryOptionDto> GarmentGroups, IReadOnlyList<CategoryOptionDto> ClothingTypes,
-    IReadOnlyList<CategoryOptionDto> Genders, IReadOnlyList<CategoryOptionDto> TargetUsers,
-    IReadOnlyList<CategoryOptionDto> Sizes, IReadOnlyList<CategoryOptionDto> ConditionGrades,
-    IReadOnlyList<ClassificationQuestionDto> ConditionQuestions)
+
+public record ClassificationCatalogDto(
+    IReadOnlyList<CategoryOptionDto> FabricTypes,
+    IReadOnlyList<CategoryOptionDto> GarmentGroups,
+    IReadOnlyList<CategoryOptionDto> ClothingTypes,
+    IReadOnlyList<CategoryOptionDto> Genders,
+    IReadOnlyList<CategoryOptionDto> TargetUsers,
+    IReadOnlyList<CategoryOptionDto> Sizes,
+    IReadOnlyList<CategoryOptionDto> ConditionGrades,
+    IReadOnlyList<ClassificationQuestionDto> ConditionQuestions
+)
 {
     public ClassificationScoringRulesDto ScoringRules { get; init; } = new();
 }
@@ -69,15 +131,39 @@ public class AnalyzeClassificationImagesDto
     public List<string> ImageDataUrls { get; set; } = [];
 }
 
-public record AiClassificationSuggestionDto(bool IsClothing, Guid? FabricTypeId, Guid? GarmentGroupId,
-    Guid? ClothingTypeId, Guid? GenderId, Guid? TargetUserId, Guid? SizeId,
-    IReadOnlyList<ClassificationAnswerDto> Answers, double Confidence, string Summary);
+public record AiClassificationSuggestionDto(
+    bool IsClothing,
+    Guid? FabricTypeId,
+    Guid? GarmentGroupId,
+    Guid? ClothingTypeId,
+    Guid? GenderId,
+    Guid? TargetUserId,
+    Guid? SizeId,
+    IReadOnlyList<ClassificationAnswerDto> Answers,
+    double Confidence,
+    string Summary
+);
 
-public record GroupedClassifiedBatchDto(Guid Id, string BatchCode, DateTime ClassificationDate,
-    string FabricType, string GarmentGroup, string ClothingType, string Gender, string TargetUser,
-    string Size, string ConditionGrade, string ProcessingDirection, int TotalItem, string Status,
-    decimal TotalWeight, string? ClassificationAreaName, DateTime? PlacedInClassificationAreaAt,
-    Guid? StorageLocationId, IReadOnlyList<string> DonationRequestCodes)
+public record GroupedClassifiedBatchDto(
+    Guid Id,
+    string BatchCode,
+    DateTime ClassificationDate,
+    string FabricType,
+    string GarmentGroup,
+    string ClothingType,
+    string Gender,
+    string TargetUser,
+    string Size,
+    string ConditionGrade,
+    string ProcessingDirection,
+    int TotalItem,
+    string Status,
+    decimal TotalWeight,
+    string? ClassificationAreaName,
+    DateTime? PlacedInClassificationAreaAt,
+    Guid? StorageLocationId,
+    IReadOnlyList<string> DonationRequestCodes
+)
 {
     public Guid? GarmentGroupId { get; init; }
     public Guid? GenderId { get; init; }
@@ -85,11 +171,26 @@ public record GroupedClassifiedBatchDto(Guid Id, string BatchCode, DateTime Clas
     public Guid? ConditionGradeId { get; init; }
 }
 
-public record GroupedClassifiedBatchDetailDto(Guid Id, string BatchCode, DateTime ClassificationDate,
-    string FabricType, string GarmentGroup, string ClothingType, string Gender, string TargetUser,
-    string Size, string ConditionGrade, string ProcessingDirection, int TotalItem, string Status,
-    decimal TotalWeight, string? ClassificationAreaName, DateTime? PlacedInClassificationAreaAt,
-    IReadOnlyList<string> DonationRequestCodes, IReadOnlyList<ClassificationItemDto> Items)
+public record GroupedClassifiedBatchDetailDto(
+    Guid Id,
+    string BatchCode,
+    DateTime ClassificationDate,
+    string FabricType,
+    string GarmentGroup,
+    string ClothingType,
+    string Gender,
+    string TargetUser,
+    string Size,
+    string ConditionGrade,
+    string ProcessingDirection,
+    int TotalItem,
+    string Status,
+    decimal TotalWeight,
+    string? ClassificationAreaName,
+    DateTime? PlacedInClassificationAreaAt,
+    IReadOnlyList<string> DonationRequestCodes,
+    IReadOnlyList<ClassificationItemDto> Items
+)
 {
     public Guid? GarmentGroupId { get; init; }
     public Guid? GenderId { get; init; }
@@ -98,49 +199,144 @@ public record GroupedClassifiedBatchDetailDto(Guid Id, string BatchCode, DateTim
 }
 
 public record SendGroupedBatchesToWarehouseDto(IReadOnlyList<Guid> GroupedBatchIds);
+
 public record SendGroupedBatchesToWarehouseResultDto(int Sent, int Skipped);
-public record CreateManualClassifiedBatchDto(Guid GarmentGroupId, Guid GenderId,
-    Guid TargetUserId, Guid ConditionGradeId);
+
+public record CreateManualClassifiedBatchDto(
+    Guid GarmentGroupId,
+    Guid GenderId,
+    Guid TargetUserId,
+    Guid ConditionGradeId
+);
+
 public record AssignItemsToClassifiedBatchDto(IReadOnlyList<Guid> ItemIds);
+
 public record FinalizeManualClassifiedBatchDto(decimal ActualWeightKg);
-public record UnassignedClassifiedItemDto(Guid Id, string ItemCode, string IntakeBatchCode,
-    string GarmentGroup, string Gender, string TargetUser, string Size, string ConditionGrade,
-    string ProcessingDirection, DateTime ClassifiedAt, Guid? GarmentGroupId, Guid? GenderId,
-    Guid? TargetUserId, Guid? SizeId, Guid? ConditionGradeId);
+
+public record UnassignedClassifiedItemDto(
+    Guid Id,
+    string ItemCode,
+    string IntakeBatchCode,
+    string GarmentGroup,
+    string Gender,
+    string TargetUser,
+    string Size,
+    string ConditionGrade,
+    string ProcessingDirection,
+    DateTime ClassifiedAt,
+    Guid? GarmentGroupId,
+    Guid? GenderId,
+    Guid? TargetUserId,
+    Guid? SizeId,
+    Guid? ConditionGradeId
+);
+
 public record PlaceGroupedClassifiedBatchDto(
     Guid AreaId,
     Guid GroupId,
     Guid StorageLocationId,
-    decimal ActualWeightKg);
+    decimal ActualWeightKg
+);
 
-public record ClassificationAreaLayoutDto(Guid WarehouseId, string WarehouseName,
-    IReadOnlyList<ClassificationAreaDto> Areas, IReadOnlyList<GroupedClassifiedBatchDto> UnassignedBatches);
-public record ClassificationAreaDto(Guid Id, string AreaName, string? Description,
-    decimal CapacityKg, decimal CurrentKg, IReadOnlyList<ClassificationAreaGroupDto> Groups);
-public record ClassificationAreaGroupDto(Guid Id, string GroupName, string? Description,
-    decimal CapacityKg, decimal CurrentKg, IReadOnlyList<ClassificationLocationDto> Locations,
-    IReadOnlyList<GroupedClassifiedBatchDto> Batches);
-public record ClassificationLocationDto(Guid Id, string LocationCode, string AisleCode,
-    string RackCode, string ShelfCode, string BinCode, decimal CapacityKg,
-    decimal CurrentWeightKg, string Status);
+public record ClassificationAreaLayoutDto(
+    Guid WarehouseId,
+    string WarehouseName,
+    IReadOnlyList<ClassificationAreaDto> Areas,
+    IReadOnlyList<GroupedClassifiedBatchDto> UnassignedBatches
+);
+
+public record ClassificationAreaDto(
+    Guid Id,
+    string AreaName,
+    string? Description,
+    decimal CapacityKg,
+    decimal CurrentKg,
+    IReadOnlyList<ClassificationAreaGroupDto> Groups
+);
+
+public record ClassificationAreaGroupDto(
+    Guid Id,
+    string GroupName,
+    string? Description,
+    decimal CapacityKg,
+    decimal CurrentKg,
+    IReadOnlyList<ClassificationLocationDto> Locations,
+    IReadOnlyList<GroupedClassifiedBatchDto> Batches
+);
+
+public record ClassificationLocationDto(
+    Guid Id,
+    string LocationCode,
+    string AisleCode,
+    string RackCode,
+    string ShelfCode,
+    string BinCode,
+    decimal CapacityKg,
+    decimal CurrentWeightKg,
+    string Status
+);
 
 public record AssignClassificationBatchDto(Guid TeamId);
-public record ClassificationStaffOptionDto(Guid Id, string FullName, string UserName,
-    string PhoneNumber, Guid? WarehouseId);
-public record ClassificationTeamDto(Guid Id, Guid ShiftId, string TeamName, string Status,
-    DateTime ShiftDate, TimeSpan StartTime, TimeSpan EndTime, Guid WarehouseId, string WarehouseName,
-    DateTime? StartedAt, DateTime? CompletedAt, IReadOnlyList<ReceivingTeamMemberDto> Members,
-    int AssignedBatches, int CompletedBatches, decimal AssignedWeightKg, decimal CompletedWeightKg);
-public record ClassificationManagementBatchDto(Guid Id, string BatchCode, string Status,
-    Guid WarehouseId, string WarehouseName, decimal TotalWeight, int DonationRequests,
-    Guid? TeamId, string? TeamName, string? CurrentAreaName, DateTime? SentAt);
+
+public record ClassificationStaffOptionDto(
+    Guid Id,
+    string FullName,
+    string UserName,
+    string PhoneNumber,
+    Guid? WarehouseId
+);
+
+public record ClassificationTeamDto(
+    Guid Id,
+    Guid ShiftId,
+    string TeamName,
+    string Status,
+    DateTime ShiftDate,
+    TimeSpan StartTime,
+    TimeSpan EndTime,
+    Guid WarehouseId,
+    string WarehouseName,
+    DateTime? StartedAt,
+    DateTime? CompletedAt,
+    IReadOnlyList<ReceivingTeamMemberDto> Members,
+    int AssignedBatches,
+    int CompletedBatches,
+    decimal AssignedWeightKg,
+    decimal CompletedWeightKg
+);
+
+public record ClassificationManagementBatchDto(
+    Guid Id,
+    string BatchCode,
+    string Status,
+    Guid WarehouseId,
+    string WarehouseName,
+    decimal TotalWeight,
+    int DonationRequests,
+    Guid? TeamId,
+    string? TeamName,
+    string? CurrentAreaName,
+    DateTime? SentAt
+);
+
 public record ClassificationManagementBoardDto(
     IReadOnlyList<ManagerWarehouseOptionDto> Warehouses,
     IReadOnlyList<ClassificationStaffOptionDto> Staff,
     IReadOnlyList<ClassificationTeamDto> Teams,
-    IReadOnlyList<ClassificationManagementBatchDto> Batches);
-public record ClassificationTeamBalanceDto(Guid TeamId, string TeamName, int AssignedBatches,
-    decimal AssignedWeightKg);
-public record AutoBalanceClassificationResultDto(int Assigned, int Skipped,
-    decimal MinimumTeamWeightKg, decimal MaximumTeamWeightKg,
-    IReadOnlyList<ClassificationTeamBalanceDto> Teams);
+    IReadOnlyList<ClassificationManagementBatchDto> Batches
+);
+
+public record ClassificationTeamBalanceDto(
+    Guid TeamId,
+    string TeamName,
+    int AssignedBatches,
+    decimal AssignedWeightKg
+);
+
+public record AutoBalanceClassificationResultDto(
+    int Assigned,
+    int Skipped,
+    decimal MinimumTeamWeightKg,
+    decimal MaximumTeamWeightKg,
+    IReadOnlyList<ClassificationTeamBalanceDto> Teams
+);

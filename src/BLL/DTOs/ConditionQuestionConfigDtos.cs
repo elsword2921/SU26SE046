@@ -1,8 +1,14 @@
 namespace BLL.DTOs;
 
 public record ConditionAnswerConfigDto(Guid Id, string Text, string Grade);
-public record ConditionQuestionConfigDto(Guid Id, string QuestionText, int DisplayOrder,
-    IReadOnlyList<ConditionAnswerConfigDto> Answers, decimal Weight = 1);
+
+public record ConditionQuestionConfigDto(
+    Guid Id,
+    string QuestionText,
+    int DisplayOrder,
+    IReadOnlyList<ConditionAnswerConfigDto> Answers,
+    decimal Weight = 1
+);
 
 public record ClassificationScoringRulesDto(decimal GradeAMinimum = 85, decimal GradeBMinimum = 50);
 

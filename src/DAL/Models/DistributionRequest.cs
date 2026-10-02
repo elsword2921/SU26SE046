@@ -32,7 +32,9 @@ namespace DAL.Models
         public virtual Warehouse Warehouse { get; set; } = null!;
         public virtual User? ApprovedByManager { get; set; }
         public virtual User? WarehouseIssuedByStaff { get; set; }
-        public virtual ICollection<DistributionItem> Items { get; set; } = new List<DistributionItem>();
-        public virtual ICollection<ShipmentStatusHistory> ShipmentHistory { get; set; } = new List<ShipmentStatusHistory>();
+        public virtual ICollection<DistributionItem> Items { get; set; } =
+            new List<DistributionItem>();
+        public virtual ICollection<ShipmentStatusHistory> ShipmentHistory { get; set; } =
+            new List<ShipmentStatusHistory>();
     }
 }

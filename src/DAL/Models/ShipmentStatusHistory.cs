@@ -1,5 +1,7 @@
 using DAL.Models.Commons;
+
 namespace DAL.Models;
+
 public class ShipmentStatusHistory : BaseEntity
 {
     public Guid DistributionRequestId { get; set; }

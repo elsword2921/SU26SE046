@@ -19,18 +19,19 @@ namespace DAL.Models
         public string? TaxCode { get; set; }
         public string? CertificateImageUrl { get; set; }
         public int DonationPoint { get; set; } = 0;
+
         // Navigation
         public virtual Role Role { get; set; } = null!;
         public virtual Warehouse? Warehouse { get; set; }
-        public virtual ICollection<DonationRequest> DonationRequests { get; set; }
-            = new List<DonationRequest>();
-        public virtual ICollection<UserVerificationCode> VerificationCodes { get; set; }
-            = new List<UserVerificationCode>();
-        public virtual ICollection<Notification> Notifications { get; set; }
-            = new List<Notification>();
-        public virtual ICollection<VoucherCode> RedeemedVoucherCodes { get; set; }
-            = new List<VoucherCode>();
-        public virtual ICollection<VoucherRedemption> VoucherRedemptions { get; set; }
-            = new List<VoucherRedemption>();
+        public virtual ICollection<DonationRequest> DonationRequests { get; set; } =
+            new List<DonationRequest>();
+        public virtual ICollection<UserVerificationCode> VerificationCodes { get; set; } =
+            new List<UserVerificationCode>();
+        public virtual ICollection<Notification> Notifications { get; set; } =
+            new List<Notification>();
+        public virtual ICollection<VoucherCode> RedeemedVoucherCodes { get; set; } =
+            new List<VoucherCode>();
+        public virtual ICollection<VoucherRedemption> VoucherRedemptions { get; set; } =
+            new List<VoucherRedemption>();
     }
 }

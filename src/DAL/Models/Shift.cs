@@ -14,6 +14,7 @@ public class Shift : BaseEntity
     public TimeSpan EndTime { get; set; }
     public virtual Warehouse Warehouse { get; set; } = null!;
     public virtual ICollection<OperationalTeam> Teams { get; set; } = new List<OperationalTeam>();
-    public virtual ICollection<PickupAssignment> PickupAssignments { get; set; } = new List<PickupAssignment>();
+    public virtual ICollection<PickupAssignment> PickupAssignments { get; set; } =
+        new List<PickupAssignment>();
     public virtual ICollection<IntakeBatch> IntakeBatches { get; set; } = new List<IntakeBatch>();
 }

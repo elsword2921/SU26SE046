@@ -32,5 +32,6 @@ public class ClassifiedItem : BaseEntity
     public virtual IntakeBatch Batch { get; set; } = null!;
     public virtual ClassifiedBatch? ClassifiedBatch { get; set; }
     public virtual User ClassifiedByStaff { get; set; } = null!;
-    public virtual ICollection<InspectionAnswer> InspectionAnswers { get; set; } = new List<InspectionAnswer>();
+    public virtual ICollection<InspectionAnswer> InspectionAnswers { get; set; } =
+        new List<InspectionAnswer>();
 }

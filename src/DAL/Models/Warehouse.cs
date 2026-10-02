@@ -19,12 +19,11 @@ namespace DAL.Models
         public decimal MaxReceivingWeightKg { get; set; } = 80;
 
         // Navigation
-        public virtual ICollection<User> Users { get; set; }
-            = new List<User>();
-        public virtual ICollection<DonationRequest> DonationRequests { get; set; }
-            = new List<DonationRequest>();
-        public virtual ICollection<IntakeBatch> IntakeBatches { get; set; }
-            = new List<IntakeBatch>();
+        public virtual ICollection<User> Users { get; set; } = new List<User>();
+        public virtual ICollection<DonationRequest> DonationRequests { get; set; } =
+            new List<DonationRequest>();
+        public virtual ICollection<IntakeBatch> IntakeBatches { get; set; } =
+            new List<IntakeBatch>();
         public virtual ICollection<Shift> Shifts { get; set; } = new List<Shift>();
         public virtual ICollection<WarehouseArea> Areas { get; set; } = new List<WarehouseArea>();
         public virtual ICollection<Inventory> Inventories { get; set; } = new List<Inventory>();

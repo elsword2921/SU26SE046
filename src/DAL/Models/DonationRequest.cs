@@ -45,15 +45,15 @@ namespace DAL.Models
 
         public virtual Warehouse Warehouse { get; set; } = null!;
 
-        public virtual ICollection<IntakeBatchDonationRequest> IntakeBatchDonationRequests { get; set; }
-            = new List<IntakeBatchDonationRequest>();
+        public virtual ICollection<IntakeBatchDonationRequest> IntakeBatchDonationRequests { get; set; } =
+            new List<IntakeBatchDonationRequest>();
 
-        public virtual ICollection<PickupAssignment> PickupAssignments { get; set; }
-            = new List<PickupAssignment>();
+        public virtual ICollection<PickupAssignment> PickupAssignments { get; set; } =
+            new List<PickupAssignment>();
 
-        public virtual ICollection<ClassifiedBatchDonationRequest> ClassifiedBatchDonationRequests { get; set; }
-            = new List<ClassifiedBatchDonationRequest>();
-        public virtual ICollection<Notification> Notifications { get; set; }
-            = new List<Notification>();
+        public virtual ICollection<ClassifiedBatchDonationRequest> ClassifiedBatchDonationRequests { get; set; } =
+            new List<ClassifiedBatchDonationRequest>();
+        public virtual ICollection<Notification> Notifications { get; set; } =
+            new List<Notification>();
     }
 }

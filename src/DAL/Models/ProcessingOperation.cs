@@ -40,7 +40,8 @@ public class ProcessingOperation : BaseEntity
     public string? GhnOrderCode { get; set; }
     public string? GhnStatus { get; set; }
     public DateTime? GhnUpdatedAt { get; set; }
-    public virtual ICollection<ProcessingShipmentEvent> ShipmentHistory { get; set; } = new List<ProcessingShipmentEvent>();
+    public virtual ICollection<ProcessingShipmentEvent> ShipmentHistory { get; set; } =
+        new List<ProcessingShipmentEvent>();
     public string? RequestNotes { get; set; }
     public string? OrganizationRejectionReason { get; set; }
     public string? ManagerRejectionReason { get; set; }
@@ -54,8 +55,8 @@ public class ProcessingOperation : BaseEntity
     public virtual User? ApprovedByManager { get; set; }
     public virtual User? RejectedByManager { get; set; }
     public virtual User? IssuedByStaff { get; set; }
-    public virtual ICollection<ProcessingOperationInput> Inputs { get; set; }
-        = new List<ProcessingOperationInput>();
-    public virtual ICollection<ProcessingOperationOutput> Outputs { get; set; }
-        = new List<ProcessingOperationOutput>();
+    public virtual ICollection<ProcessingOperationInput> Inputs { get; set; } =
+        new List<ProcessingOperationInput>();
+    public virtual ICollection<ProcessingOperationOutput> Outputs { get; set; } =
+        new List<ProcessingOperationOutput>();
 }
