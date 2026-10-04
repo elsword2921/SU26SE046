@@ -1674,8 +1674,13 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
 
     public async Task MoveAsync(Guid staffId, Guid inventoryId, MoveInventoryDto dto)
     {
-        await using var transaction = await context.Database.BeginTransactionAsync();
+        await using var transaction = await context.Database.BeginTransactionAsync(
+            System.Data.IsolationLevel.Serializable
+        );
         var inventory = await InventoryForMutation(inventoryId);
+        await ResolveWarehouseIdAsync(staffId, inventory.WarehouseId);
+        if (inventory.TotalWeight <= 0)
+            throw new InvalidOperationException("Inventory has no stock to move.");
         if (!inventory.StorageLocationId.HasValue)
             throw new InvalidOperationException("Inventory has not been put away.");
         if (inventory.StorageLocationId == dto.DestinationLocationId)
@@ -1688,6 +1693,8 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
                     x.Id == dto.DestinationLocationId
                     && x.WarehouseId == inventory.WarehouseId
                     && x.IsActive != false
+                    && x.Area.IsActive != false
+                    && x.Warehouse.IsActive != false
                 ) ?? throw new InvalidOperationException("Destination location not found.");
         var requiredDirection = ProcessingDirectionForGrade(inventory.ConditionRating);
         if (destination.PreferredProcessingDirection != requiredDirection)
@@ -1699,6 +1706,41 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
                 "Destination location does not have enough capacity."
             );
         var sourceId = inventory.StorageLocationId;
+        var sourceAreaId = inventory.StorageLocation!.AreaId;
+        if (
+            sourceAreaId != destination.AreaId
+            && destination.Area.CapacityKg - destination.Area.CurrentKg < inventory.TotalWeight
+        )
+            throw new InvalidOperationException("Destination area does not have enough capacity.");
+
+        // Complete the transfer together with MOVE; no separate approval is required.
+        // Weight and exact locations remain in the linked transaction item.
+        var now = DateTime.UtcNow;
+        var transfer = new TransferRequest
+        {
+            Id = Guid.NewGuid(),
+            WarehouseId = inventory.WarehouseId,
+            FromAreaId = sourceAreaId,
+            ToAreaId = destination.AreaId,
+            Status = "Completed",
+            ReceivedAt = now,
+            CreateAt = now,
+            CreatedBy = staffId,
+            Items =
+            [
+                new TransferItem
+                {
+                    Id = Guid.NewGuid(),
+                    ToAreaId = destination.AreaId,
+                    ClassifiedBatchId = inventory.ClassifiedBatchId,
+                    RequestStaffId = staffId,
+                    ReceivedAt = now,
+                    CreateAt = now,
+                    CreatedBy = staffId,
+                },
+            ],
+        };
+        context.TransferRequests.Add(transfer);
         AdjustLocationWeight(inventory, -inventory.TotalWeight);
         destination.CurrentWeightKg += inventory.TotalWeight;
         destination.Area.CurrentKg += inventory.TotalWeight;
@@ -1711,8 +1753,8 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
             staffId,
             inventory.WarehouseId,
             "MOVE",
-            "Inventory",
-            inventory.Id,
+            "TransferRequest",
+            transfer.Id,
             $"{dto.Reason}. {dto.Notes}".Trim(),
             inventory,
             inventory.Quantity,
