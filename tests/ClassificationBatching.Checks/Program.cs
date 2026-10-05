@@ -56,5 +56,6 @@ try
     await using (var db = new AppDbContext(options))
         Check((await db.ClassifiedBatches.SingleAsync()).TotalWeight == 50m, "finalize accepts upper boundary 50 kg");
 
+    await DonationProgressChecks.RunAsync(options, batch.Id, request.Id, staff.Id, warehouse.Id);
 }
 finally { await using var db = new AppDbContext(options); await db.Database.EnsureDeletedAsync(); }

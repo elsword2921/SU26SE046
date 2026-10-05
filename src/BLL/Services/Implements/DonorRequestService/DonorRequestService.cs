@@ -215,8 +215,9 @@ namespace BLL.Services.Implements.DonorRequestService
                          && x.IsActive != false,
                     noTracked: true);
 
-            return await MapToSearchResult(requests)
-                .ToListAsync();
+            var results = await MapToSearchResult(requests).ToListAsync();
+            await DonationProgressReader.PopulateAsync(_context, results);
+            return results;
 
         }
 
@@ -230,8 +231,9 @@ namespace BLL.Services.Implements.DonorRequestService
                          && x.IsActive != false,
                     noTracked: true);
 
-            return await MapToSearchResult(requests)
-                .ToListAsync();
+            var results = await MapToSearchResult(requests).ToListAsync();
+            await DonationProgressReader.PopulateAsync(_context, results);
+            return results;
         }
 
         private static IQueryable<DonorRequestSearchResultDto> MapToSearchResult(IQueryable<DonationRequest> requests)

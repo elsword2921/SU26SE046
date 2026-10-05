@@ -34,6 +34,7 @@ namespace BLL.DTOs
         public string Status { get; set; } = string.Empty;
 
         public string StatusText { get; set; } = string.Empty;
+        public string? ProgressNote { get; set; }
 
         public DateTime? CreatedAt { get; set; }
 
