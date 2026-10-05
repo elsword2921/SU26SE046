@@ -1153,6 +1153,54 @@ public partial class ReceivingOperationsService(AppDbContext context) : IReceivi
         await transaction.CommitAsync();
     }
 
+    public async Task RescheduleAndAssignAsync(Guid managerId, RescheduleAndAssignDto dto)
+    {
+        await using var transaction = await BeginDispatchAsync();
+        var request =
+            await context.DonationRequests.FirstOrDefaultAsync(x =>
+                x.Id == dto.RequestId && x.IsActive != false
+            ) ?? throw new InvalidOperationException("Không tìm thấy đơn.");
+        if (
+            request.DeliveryMethod != "StaffPickup"
+            || !request.PickupDate.HasValue
+            || request.PickupDate.Value >= VietnamTime.Now
+            || request.Status
+                is not (
+                    DonationRequestStatus.WaitingReceivingStaff
+                    or DonationRequestStatus.PendingStaffAssign
+                )
+            || await context.PickupAssignments.AnyAsync(x =>
+                x.DonorRequestId == request.Id && x.IsActive != false
+            )
+        )
+            throw new InvalidOperationException(
+                "Chỉ hẹn lại đơn đến lấy tận nơi quá hẹn và chưa phân công."
+            );
+        if (
+            !dto.DonorConfirmed
+            || dto.PickupDate.Kind != DateTimeKind.Unspecified
+            || dto.PickupDate <= VietnamTime.Now
+        )
+            throw new InvalidOperationException(
+                "Xác nhận lịch với donor và chọn giờ hẹn mới trong tương lai theo giờ Việt Nam."
+            );
+        var previousDate = request.PickupDate.Value;
+        request.PickupDate = dto.PickupDate;
+        request.UpdatedBy = managerId;
+        // Reuse all existing warehouse, shift, team and capacity checks.
+        // A failure rolls back both the appointment and assignment.
+        await AssignRequestCoreAsync(new(dto.RequestId, dto.TeamId));
+        NotificationWriter.NotifyDonor(
+            context,
+            request,
+            "PickupRescheduled",
+            "Đã hẹn lại lịch lấy hàng",
+            $"Lịch lấy hàng được đổi từ {previousDate:HH:mm dd/MM/yyyy} sang {dto.PickupDate:HH:mm dd/MM/yyyy} (giờ Việt Nam), sau khi xác nhận với bạn."
+        );
+        await context.SaveChangesAsync();
+        await transaction.CommitAsync();
+    }
+
     private async Task AssignRequestCoreAsync(AssignDonationRequestDto dto)
     {
         var request =

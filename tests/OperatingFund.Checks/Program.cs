@@ -46,6 +46,11 @@ try {
     Check((await Run(s=>s.Mine(org.Id,1))).Total == 0, "private contribution history");
     await Denied(s=>s.AllContributions(org.Id,1), "organization cannot read all contributions");
     Check((await Run(s=>s.AllContributions(manager.Id,1))).Total==1,"manager sees fund receipts");
+    var contributor = (await Run(s => s.AllContributions(manager.Id, 1))).Items.Single().Contributor;
+    Check(contributor is not null && contributor.UserName == donor.UserName && contributor.Email == donor.Email && contributor.Role == "Donor", "manager receipts include linked contributor profile");
+    Check((await Run(s => s.Mine(donor.Id, 1))).Items.Single().Contributor is null, "personal history does not expose manager-only profile");
+    await Denied(s => s.AllContributions(donor.Id, 1), "donor cannot list contributor profiles");
+
     await Denied(s=>s.Refresh(org.Id,c.Id), "cross-account reconciliation denied");
     JsonElement Hook(string sig = "valid", string currency = "VND") => JsonSerializer.SerializeToElement(new { data = new { orderCode=c.OrderCode, currency, paymentLinkId=gateway.Links[c.OrderCode].Id }, signature=sig });
     await Denied(s=>s.Webhook(Hook("invalid")), "forged webhook rejected");

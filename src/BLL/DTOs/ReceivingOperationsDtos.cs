@@ -61,6 +61,7 @@ public record AutoBalanceResultDto(
 );
 
 public record AssignDonationRequestDto(Guid RequestId, Guid TeamId);
+public record RescheduleAndAssignDto(Guid RequestId, Guid TeamId, DateTime PickupDate, bool DonorConfirmed);
 
 public record ConfirmPickupDto(decimal ActualWeight, string? Notes, List<string>? ImageUrls);
 

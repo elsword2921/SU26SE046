@@ -11,6 +11,13 @@ namespace Capstone_API.Controllers;
 [Authorize]
 public class ReceivingOperationsController(IReceivingOperationsService service) : ControllerBase
 {
+    [HttpPost("reschedule-and-assign")]
+    [Authorize(Roles = "Manager")]
+    public async Task<IActionResult> RescheduleAndAssign(RescheduleAndAssignDto dto)
+    {
+        await service.RescheduleAndAssignAsync(CurrentUserId, dto);
+        return NoContent();
+    }
     [HttpGet("capacity")]
     [Authorize(Roles = "Manager")]
     public async Task<IActionResult> Capacity([FromQuery] Guid? warehouseId, [FromQuery] DateTime? date)

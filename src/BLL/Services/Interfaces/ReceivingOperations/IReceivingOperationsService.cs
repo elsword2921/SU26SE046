@@ -28,6 +28,7 @@ public interface IReceivingOperationsService
     Task<List<ManagerShiftOverviewDto>> GetManagerShiftsAsync(
         Guid? warehouseId = null, DateTime? fromDate = null, DateTime? toDate = null);
     Task AssignRequestAsync(AssignDonationRequestDto dto);
+    Task RescheduleAndAssignAsync(Guid managerId, RescheduleAndAssignDto dto);
     Task<List<ReceivingBatchDto>> GetMyBatchesAsync(Guid staffId, string? stage = null);
     Task<ReceivingOverviewDto> GetMyOverviewAsync(Guid staffId);
     Task<List<ReceivingStagingGroupDto>> GetMyReceivingGroupsAsync(Guid staffId);

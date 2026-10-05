@@ -14,7 +14,16 @@ public record ContributionDto(
     string Status,
     DateTimeOffset CreatedAt,
     DateTimeOffset? ConfirmedAt,
-    string? CheckoutUrl
+    string? CheckoutUrl,
+    ContributorDto? Contributor = null
+);
+
+public record ContributorDto(
+    string FullName,
+    string UserName,
+    string Role,
+    string Email,
+    string PhoneNumber
 );
 
 public record ExpenseDto(
@@ -337,14 +346,31 @@ public class OperatingFundService(AppDbContext db, IPayOsGateway gateway)
     {
         await RequireUser(userId, manager: true);
         page = Math.Clamp(page, 1, 100000);
-        var query = Contributions.AsNoTracking();
+        var query = Contributions.AsNoTracking().Include(c => c.User).ThenInclude(u => u.Role);
         var rows = await query
             .OrderByDescending(c => c.CreatedAt)
             .ThenBy(c => c.Id)
             .Skip((page - 1) * 20)
             .Take(20)
             .ToListAsync();
-        return new(rows.Select(View).ToList(), await query.CountAsync(), page, 20);
+        return new(
+            rows.Select(c =>
+                    View(c) with
+                    {
+                        Contributor = new ContributorDto(
+                            c.User.FullName,
+                            c.User.UserName,
+                            c.User.Role.RoleName,
+                            c.User.Email,
+                            c.User.PhoneNumber
+                        ),
+                    }
+                )
+                .ToList(),
+            await query.CountAsync(),
+            page,
+            20
+        );
     }
 
     public async Task<FundPage<ExpenseDto>> ExpenseList(Guid userId, int page)
