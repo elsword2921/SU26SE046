@@ -43,5 +43,18 @@ try
         Check(await db.ClassifiedBatchDonationRequests.CountAsync(x => x.IsActive != false) == 2, "re-adding source reactivates provenance without duplicates");
         Check((await db.ClassifiedBatches.SingleAsync()).TotalItem == 4, "count remains correct after remove and multi-add");
     }
+    foreach (var invalid in new[] { 9.99m, 50.01m, 100m, 10.001m })
+    {
+        var rejected = false;
+        try { await Run(s => s.FinalizeManualBatchAsync(staff.Id, batch.Id, new(invalid))); }
+        catch (InvalidOperationException) { rejected = true; }
+        Check(rejected, $"finalize rejects {invalid} kg");
+    }
+    await using (var db = new AppDbContext(options))
+        Check((await db.ClassifiedBatches.SingleAsync()).Status == "Draft", "invalid weight leaves batch draft");
+    await Run(s => s.FinalizeManualBatchAsync(staff.Id, batch.Id, new(50m)));
+    await using (var db = new AppDbContext(options))
+        Check((await db.ClassifiedBatches.SingleAsync()).TotalWeight == 50m, "finalize accepts upper boundary 50 kg");
+
 }
 finally { await using var db = new AppDbContext(options); await db.Database.EnsureDeletedAsync(); }

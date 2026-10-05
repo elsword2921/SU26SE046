@@ -997,9 +997,13 @@ public partial class ClassificationOperationsService(AppDbContext context)
         FinalizeManualClassifiedBatchDto dto
     )
     {
-        if (dto.ActualWeightKg < 10m || decimal.Round(dto.ActualWeightKg, 2) != dto.ActualWeightKg)
+        if (
+            dto.ActualWeightKg < 10m
+            || dto.ActualWeightKg > 50m
+            || decimal.Round(dto.ActualWeightKg, 2) != dto.ActualWeightKg
+        )
             throw new InvalidOperationException(
-                "Khối lượng batch phải từ 10 kg trở lên và có tối đa 2 chữ số thập phân để hoàn tất gom nhóm."
+                "Khối lượng batch phải từ 10 đến 50 kg và có tối đa 2 chữ số thập phân để hoàn tất gom nhóm."
             );
         var warehouseId = await RequireStaffWarehouseIdAsync(staffId);
         var batch =
