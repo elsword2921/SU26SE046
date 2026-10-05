@@ -1209,8 +1209,14 @@ public class WarehouseOperationsService(AppDbContext context) : IWarehouseOperat
         ConfirmWarehouseReceiptDto dto
     )
     {
-        if (dto.ActualWeightKg <= 0)
-            throw new InvalidOperationException("Actual weight must be greater than zero.");
+        if (
+            dto.ActualWeightKg < 10m
+            || dto.ActualWeightKg > 50m
+            || decimal.Round(dto.ActualWeightKg, 2) != dto.ActualWeightKg
+        )
+            throw new InvalidOperationException(
+                "Khối lượng thực nhận phải từ 10 đến 50 kg và có tối đa 2 chữ số thập phân."
+            );
         if (!dto.SealIntact && string.IsNullOrWhiteSpace(dto.DiscrepancyNotes))
             throw new InvalidOperationException(
                 "A discrepancy note is required when the seal is not intact."

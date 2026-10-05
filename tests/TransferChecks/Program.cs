@@ -74,6 +74,7 @@ try
     await db.SaveChangesAsync();
     db.ChangeTracker.Clear();
     var service = new WarehouseOperationsService(db);
+    await WarehouseReceiptWeightChecks.RunAsync(db, service, warehouse.Id, staff.Id);
     await service.MoveAsync(staff.Id, stock.Id, new(target.Id, "Rearrange", "Test move"));
     db.ChangeTracker.Clear();
     var transfer = await db.TransferRequests.Include(x => x.Items).SingleAsync();
